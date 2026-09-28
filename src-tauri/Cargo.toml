@@ -1,0 +1,38 @@
+[package]
+name = "saufox-launcher"
+version = "0.1.0"
+description = "SauFox Entertainment launcher"
+authors = ["SauFox Entertainment"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "saufox_launcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = "0.3"
+keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
+sha2 = "0.10"
+hex = "0.4"
+zip = "2"
+dirs = "5"
+url = "2"
+tiny_http = "0.12"
+thiserror = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+panic = "abort"
