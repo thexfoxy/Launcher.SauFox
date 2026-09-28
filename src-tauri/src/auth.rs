@@ -109,7 +109,16 @@ pub async fn sign_in() -> Result<Session, String> {
 fn webbrowser_open(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn()?;
+        // Not `cmd /C start`: the sign-in URL carries `?port=…&state=…`, and
+        // cmd treats `&` as a command separator, so `start` would open only
+        // the part before it and drop the state — the website would then say
+        // the link isn't from the launcher. rundll32's FileProtocolHandler
+        // takes the whole URL as one argument, no shell parsing, and hands it
+        // to the default browser.
+        std::process::Command::new("rundll32.exe")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(url)
+            .spawn()?;
     }
     #[cfg(target_os = "macos")]
     {

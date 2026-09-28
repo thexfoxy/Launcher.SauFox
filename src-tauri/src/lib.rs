@@ -116,8 +116,13 @@ fn open_url(url: String) -> Result<(), String> {
     if !url.starts_with("https://saufoxentertainment.ir") && !url.starts_with("https://portal.saufoxentertainment.ir") {
         return Err("blocked".into());
     }
+    // rundll32, not `cmd /C start`: cmd treats `&` in a query string as a
+    // command separator and would drop the rest of the URL.
     #[cfg(target_os = "windows")]
-    let r = std::process::Command::new("cmd").args(["/C", "start", "", &url]).spawn();
+    let r = std::process::Command::new("rundll32.exe")
+        .arg("url.dll,FileProtocolHandler")
+        .arg(&url)
+        .spawn();
     #[cfg(target_os = "macos")]
     let r = std::process::Command::new("open").arg(&url).spawn();
     #[cfg(all(unix, not(target_os = "macos")))]
