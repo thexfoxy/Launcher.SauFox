@@ -675,7 +675,7 @@ a {
 .feat__body {
   position: relative;
   padding: 40px;
-  max-width: 560px;
+  max-width: min(560px, 100%);
 }
 .feat__kicker {
   font-size: 11px;
@@ -686,11 +686,12 @@ a {
 }
 .feat__title {
   margin: 0 0 12px;
-  font-size: 40px;
+  font-size: clamp(28px, 4.2vw, 40px);
   line-height: 1.05;
   font-weight: 800;
   color: #fff;
   text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
 }
 .feat__meta {
   display: flex;

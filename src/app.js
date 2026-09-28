@@ -88,7 +88,7 @@ const h = (tag, attrs, ...kids) => {
   const [name, ...cls] = tag.split(".");
   const el = document.createElement(name || "div");
   if (cls.length) el.className = cls.join(" ");
-  if (attrs && (attrs.nodeType || typeof attrs !== "object")) {
+  if (attrs && (attrs.nodeType || Array.isArray(attrs) || typeof attrs !== "object")) {
     kids.unshift(attrs);
     attrs = null;
   }
