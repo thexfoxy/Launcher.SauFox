@@ -64,6 +64,57 @@ async fn library() -> Result<Value, String> {
     Ok(Value::Array(games))
 }
 
+// The whole published game catalogue for the store. Each game is marked as
+// owned (and, when owned, carries its key, install state, and newest Windows
+// build) so the store and the library can be drawn from one list.
+#[tauri::command]
+async fn catalog() -> Result<Value, String> {
+    let games = api::catalog().await?.as_array().cloned().unwrap_or_default();
+    // The account's games, keyed by work, so the store knows what's owned.
+    let owned = api::my_licenses()
+        .await
+        .ok()
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default();
+    let mut mine = std::collections::HashMap::new();
+    for lic in owned {
+        if let Some(id) = lic.get("work_id").and_then(|v| v.as_str()) {
+            mine.insert(id.to_string(), lic);
+        }
+    }
+    let mut out = Vec::new();
+    for game in games {
+        let work_id = game.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let lic = mine.get(&work_id);
+        let build = if lic.is_some() {
+            let builds = api::builds(&work_id).await.unwrap_or(Value::Array(vec![]));
+            builds
+                .as_array()
+                .and_then(|a| a.iter().find(|b| b.get("platform").and_then(|p| p.as_str()) == Some("windows")))
+                .cloned()
+        } else {
+            None
+        };
+        let installed = install::installed(&work_id);
+        let mut row = game.clone();
+        if let Some(obj) = row.as_object_mut() {
+            obj.insert("owned".into(), json!(lic.is_some()));
+            obj.insert("license_id".into(), lic.and_then(|l| l.get("license_id")).cloned().unwrap_or(Value::Null));
+            obj.insert("code".into(), lic.and_then(|l| l.get("code")).cloned().unwrap_or(Value::Null));
+            obj.insert("mine".into(), lic.and_then(|l| l.get("mine")).cloned().unwrap_or(json!(true)));
+            obj.insert("devices".into(), lic.and_then(|l| l.get("devices")).cloned().unwrap_or(Value::Null));
+            obj.insert("max_devices".into(), lic.and_then(|l| l.get("max_devices")).cloned().unwrap_or(Value::Null));
+            obj.insert("build".into(), build.unwrap_or(Value::Null));
+            obj.insert(
+                "installed".into(),
+                installed.as_ref().map(|i| json!({ "version": i.version, "build_id": i.build_id })).unwrap_or(Value::Null),
+            );
+        }
+        out.push(row);
+    }
+    Ok(Value::Array(out))
+}
+
 #[tauri::command]
 async fn redeem(code: String) -> Result<Value, String> {
     api::redeem(&code).await
@@ -140,6 +191,7 @@ pub fn run() {
             sign_in,
             sign_out,
             library,
+            catalog,
             redeem,
             install_game,
             play,

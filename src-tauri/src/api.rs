@@ -136,6 +136,30 @@ pub async fn my_licenses() -> Result<Value, String> {
     rpc("my_licenses", json!({})).await
 }
 
+/// The whole published game catalogue (public), for the store. No account is
+/// needed — anyone may read published works — so this works signed out too.
+pub async fn catalog() -> Result<Value, String> {
+    let res = client()
+        .get(format!("{SUPABASE_URL}/rest/v1/works"))
+        .query(&[
+            (
+                "select",
+                "id,title,status,status_text,status_text_fa,price_irr,price_usd,cover_url,hero_url,hero_focus,genres,platforms,rating,stills,synopsis,synopsis_fa,review_count,review_sum",
+            ),
+            ("kind", "eq.Game"),
+            ("published", "eq.true"),
+            ("order", "sort.asc,created_at.desc"),
+        ])
+        .header("apikey", SUPABASE_ANON_KEY)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("server error ({})", res.status()));
+    }
+    res.json().await.map_err(|e| e.to_string())
+}
+
 /// Redeem a game key into the account's library.
 pub async fn redeem(code: &str) -> Result<Value, String> {
     rpc("redeem_license", json!({ "p_code": code })).await

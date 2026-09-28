@@ -1,36 +1,66 @@
-// The launcher window. It only ever asks the backend (Rust) to do things;
-// the backend holds the session and talks to the server. Bilingual, like
-// the rest of SauFox.
-const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
-const listen = (event, cb) => window.__TAURI__.event.listen(event, cb);
+// The launcher window — a Steam-like store + library over a cyberpunk glass
+// shell. It only ever asks the backend (Rust) to do things; the backend holds
+// the session and talks to the server. Buying always bounces to the website,
+// so money changes hands there and only there. Bilingual, like the rest of
+// SauFox, and every motion respects prefers-reduced-motion.
+const T = window.__TAURI__;
+const invoke = (cmd, args) => T.core.invoke(cmd, args);
+const listen = (event, cb) => T.event.listen(event, cb);
 const app = document.getElementById("app");
 const SITE = "https://saufoxentertainment.ir";
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------- Language ----------
 const FA = {
   "Customer launcher": "لانچر مشتریان",
-  "SauFox Entertainment": "ساوفاکس اینترتینمنت",
-  "Your games, in one place.": "بازی‌های شما، یک‌جا.",
+  "Your games, one launcher.": "بازی‌های شما، یک لانچر.",
   "Sign in with your SauFox account": "ورود با حساب ساوفاکس",
-  "Opening your browser…": "در حال باز کردن مرورگر…",
   "Waiting for you to allow it in the browser…": "منتظر تأیید شما در مرورگر…",
+  "Sign-in cancelled.": "ورود لغو شد.",
+  "Sign-in timed out.": "زمان ورود تمام شد.",
   "Sign out": "خروج",
-  "Your games": "بازی‌های شما",
+  Store: "فروشگاه",
+  Library: "کتابخانه",
+  Downloads: "دانلودها",
+  "Store — all our games": "فروشگاه — همه‌ی بازی‌ها",
+  "Buy on the website, play here.": "در سایت بخرید، اینجا بازی کنید.",
+  "Featured": "ویژه",
+  "Your library": "کتابخانه‌ی شما",
+  "Everything you own, ready to install.": "هرچه دارید، آماده‌ی نصب.",
   "Have a game key?": "کلید بازی دارید؟",
-  "Add": "افزودن",
-  "Install": "نصب",
-  "Play": "اجرا",
-  "Update": "به‌روزرسانی",
+  Add: "افزودن",
+  Buy: "خرید",
+  "Buy on the website": "خرید از وب‌سایت",
+  "View": "مشاهده",
+  Install: "نصب",
+  Play: "اجرا",
+  Update: "به‌روزرسانی",
   "Installing…": "در حال نصب…",
   "Downloading…": "در حال دانلود…",
   "Checking…": "در حال بررسی…",
   "Unpacking…": "در حال باز کردن…",
-  "Installed": "نصب‌شده",
-  "Copy": "کپی",
-  "Copied": "کپی شد",
+  Installed: "نصب‌شده",
+  Owned: "خریداری‌شده",
+  "In library": "در کتابخانه",
+  Copy: "کپی",
+  Copied: "کپی شد",
+  "Your key": "کلید شما",
   "Your library is empty": "کتابخانه‌ی شما خالی است",
   "Games you buy or unlock will appear here.": "بازی‌هایی که می‌خرید یا فعال می‌کنید اینجا می‌آیند.",
-  "Browse games": "دیدن بازی‌ها",
+  "Browse the store": "دیدن فروشگاه",
+  "No active downloads": "دانلود فعالی نیست",
+  "Installs in progress will show up here.": "نصب‌های در حال انجام اینجا نمایش داده می‌شوند.",
+  Back: "بازگشت",
+  Overview: "معرفی",
+  Screenshots: "تصاویر",
+  "About this game": "درباره‌ی این بازی",
+  Rating: "رده‌بندی",
+  Platforms: "پلتفرم‌ها",
+  Genres: "ژانرها",
+  Reviews: "نقدها",
+  reviews: "نقد",
+  Free: "رایگان",
+  gift: "هدیه",
   "This computer counts toward the key's device limit.": "این کامپیوتر جزو سقف دستگاه‌های کلید حساب می‌شود.",
   "You've reached this key's device limit.": "به سقف دستگاه‌های این کلید رسیده‌اید.",
   "That key isn't valid.": "این کلید معتبر نیست.",
@@ -38,8 +68,9 @@ const FA = {
   "Added to your library.": "به کتابخانه افزوده شد.",
   "Not available for Windows yet.": "هنوز برای ویندوز آماده نیست.",
   "Something went wrong. Try again.": "مشکلی پیش آمد. دوباره امتحان کنید.",
-  "gift": "هدیه",
   "Need help?": "کمک می‌خواهید؟",
+  "This PC": "این کامپیوتر",
+  devices: "دستگاه",
 };
 let LANG = "en";
 try {
@@ -52,12 +83,12 @@ const applyLang = () => {
 };
 const digits = (n) => (LANG === "fa" ? String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]) : String(n));
 
-// ---------- A tiny DOM builder ----------
+// ---------- Tiny DOM builder ----------
 const h = (tag, attrs, ...kids) => {
   const [name, ...cls] = tag.split(".");
   const el = document.createElement(name || "div");
   if (cls.length) el.className = cls.join(" ");
-  if (attrs && attrs.nodeType) {
+  if (attrs && (attrs.nodeType || typeof attrs !== "object")) {
     kids.unshift(attrs);
     attrs = null;
   }
@@ -65,10 +96,18 @@ const h = (tag, attrs, ...kids) => {
     const v = attrs[k];
     if (v == null || v === false) continue;
     if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
-    else if (k === "src" || k === "html") el[k === "html" ? "innerHTML" : "src"] = v;
+    else if (k === "html") el.innerHTML = v;
+    else if (k === "src") el.src = v;
     else el.setAttribute(k, v === true ? "" : v);
   }
   for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return el;
+};
+const svg = (paths, attrs) => {
+  const s = `<svg viewBox="0 0 24 24">${paths}</svg>`;
+  const wrap = h("span", { html: s });
+  const el = wrap.firstChild;
+  for (const k in attrs || {}) el.setAttribute(k, attrs[k]);
   return el;
 };
 
@@ -78,32 +117,156 @@ const fmtSize = (bytes) => {
   if (gb >= 1) return `${digits(gb.toFixed(1))} GB`;
   return `${digits(Math.round(bytes / 1e6))} MB`;
 };
+const money = (g) => {
+  if (LANG === "fa") return g.price_irr == null ? t("Free") : `${Number(g.price_irr).toLocaleString("fa-IR")} ریال`;
+  return g.price_usd == null ? t("Free") : `$${Number(g.price_usd).toFixed(2)}`;
+};
+const art = (path) => (path ? (/^https?:/.test(path) ? path : `${SITE}/${path}`) : "logo.webp");
+const synopsisOf = (g) => (LANG === "fa" ? g.synopsis_fa || g.synopsis : g.synopsis || g.synopsis_fa) || "";
 
-// ---------- Sign-in screen ----------
+// ---------- Motion helpers ----------
+// A soft light that follows the pointer (feeds the CSS --mx/--my vars).
+const glow = (el) => {
+  if (reduce) return el;
+  el.addEventListener("pointermove", (e) => {
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    el.style.setProperty("--my", `${e.clientY - r.top}px`);
+  });
+  return el;
+};
+// A gentle 3-D tilt toward the pointer, for the store cards.
+const tilt = (el) => {
+  if (reduce) return el;
+  el.addEventListener("pointermove", (e) => {
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width - 0.5;
+    const py = (e.clientY - r.top) / r.height - 0.5;
+    el.style.transform = `perspective(800px) rotateX(${(-py * 5).toFixed(2)}deg) rotateY(${(px * 5).toFixed(2)}deg) translateY(-6px)`;
+  });
+  el.addEventListener("pointerleave", () => (el.style.transform = ""));
+  return el;
+};
+// Reveal children as they scroll into view, lightly staggered.
+let revealObs = null;
+const watchReveals = (root) => {
+  if (reduce) {
+    root.querySelectorAll(".reveal").forEach((n) => n.classList.add("is-in"));
+    return;
+  }
+  if (revealObs) revealObs.disconnect();
+  revealObs = new IntersectionObserver(
+    (entries) => {
+      for (const en of entries)
+        if (en.isIntersecting) {
+          en.target.classList.add("is-in");
+          revealObs.unobserve(en.target);
+        }
+    },
+    { root, threshold: 0.08 }
+  );
+  root.querySelectorAll(".reveal").forEach((n, i) => {
+    n.style.transitionDelay = `${Math.min(i * 45, 400)}ms`;
+    revealObs.observe(n);
+  });
+};
+
+// ---------- Toast & lightbox ----------
+let toastTimer = null;
+const toast = (msg, kind) => {
+  document.querySelector(".toast")?.remove();
+  const el = h("div", { class: `toast${kind ? ` is-${kind}` : ""}` }, msg);
+  document.body.append(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.remove(), 2600);
+};
+const lightbox = (srcs, i) => {
+  const box = h("div.lightbox", h("img", { src: srcs[i], alt: "" }));
+  box.addEventListener("click", () => box.remove());
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape") {
+      box.remove();
+      document.removeEventListener("keydown", esc);
+    }
+  });
+  document.body.append(box);
+};
+
+// ---------- Install progress (shared across views) ----------
+const installState = {}; // work_id -> { phase, pct, received, total }
+const downloading = new Set();
+let subs = {}; // work_id -> [fn]
+const subscribe = (id, fn) => {
+  (subs[id] = subs[id] || []).push(fn);
+  if (installState[id]) fn(installState[id]);
+};
+let progressBound = false;
+const bindProgress = () => {
+  if (progressBound) return;
+  progressBound = true;
+  listen("install-progress", (e) => {
+    const p = e.payload;
+    const pct = p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : 0;
+    installState[p.work_id] = { phase: p.phase, pct, received: p.received, total: p.total };
+    (subs[p.work_id] || []).forEach((fn) => fn(installState[p.work_id]));
+  });
+};
+const phaseText = (s) =>
+  s.phase === "download" ? `${t("Downloading…")} ${digits(s.pct)}%` : s.phase === "verify" ? t("Checking…") : s.phase === "install" ? t("Unpacking…") : "";
+
+// ---------- State ----------
+const STATE = { me: null, catalog: [], deviceName: "", view: "store", detail: null };
+const gameById = (id) => STATE.catalog.find((g) => g.id === id);
+const owned = () => STATE.catalog.filter((g) => g.owned);
+
+const refresh = async () => {
+  try {
+    STATE.catalog = (await invoke("catalog")) || [];
+  } catch (e) {
+    STATE.catalog = [];
+  }
+};
+
+// ---------- Window controls ----------
+const wireWindow = () => {
+  let win;
+  try {
+    const w = T.window;
+    win = (w.getCurrentWindow || w.getCurrent).call(w);
+  } catch (e) {
+    return;
+  }
+  document.querySelectorAll("[data-win]").forEach((b) => {
+    b.onclick = () => {
+      const a = b.dataset.win;
+      if (a === "min") win.minimize();
+      else if (a === "max") win.toggleMaximize();
+      else win.close();
+    };
+  });
+};
+
+// ---------- Sign-in gate ----------
 const gate = (problem) => {
   applyLang();
-  const go = h("button.button.button--primary.gate__go", {}, t("Sign in with your SauFox account"));
-  const hint = h("p.gate__lead");
+  const problemEl = h("p.gate__problem", { role: "alert" }, problem ? t("Something went wrong. Try again.") : "");
+  const hint = h("p.gate__problem");
+  const go = glow(h("button.button.button--primary.button--lg.gate__go", {}, t("Sign in with your SauFox account")));
   go.addEventListener("click", async () => {
     go.disabled = true;
+    problemEl.textContent = "";
     hint.textContent = t("Waiting for you to allow it in the browser…");
     try {
       await invoke("sign_in");
-      start();
+      boot();
     } catch (e) {
       go.disabled = false;
       hint.textContent = "";
-      showProblem(String(e));
+      const msg = String(e);
+      problemEl.textContent =
+        msg === "sign-in cancelled" ? t("Sign-in cancelled.") : msg === "sign-in timed out" ? t("Sign-in timed out.") : t("Something went wrong. Try again.");
     }
   });
-  const showProblem = (msg) => {
-    const map = {
-      "sign-in cancelled": LANG === "fa" ? "ورود لغو شد." : "Sign-in cancelled.",
-      "sign-in timed out": LANG === "fa" ? "زمان ورود تمام شد." : "Sign-in timed out.",
-    };
-    problemEl.textContent = map[msg] || t("Something went wrong. Try again.");
-  };
-  const problemEl = h("p.gate__problem", { role: "alert" }, problem ? t("Something went wrong. Try again.") : "");
   app.replaceChildren(
     h(
       "div.gate",
@@ -112,11 +275,11 @@ const gate = (problem) => {
         h("img.gate__logo", { src: "logo.webp", alt: "SauFox" }),
         h("p.gate__kicker", t("Customer launcher")),
         h("h1.gate__title", "SauFox Entertainment"),
-        h("p.gate__lead", t("Your games, in one place.")),
+        h("p.gate__lead", t("Your games, one launcher.")),
         problemEl,
         go,
         hint,
-        h("button.top__out", { onclick: toggleLang }, LANG === "fa" ? "English" : "فارسی")
+        h("div.gate__foot", h("button.linky", { onclick: toggleLang }, LANG === "fa" ? "English" : "فارسی"))
       )
     )
   );
@@ -127,12 +290,310 @@ const toggleLang = () => {
   try {
     localStorage.setItem("saufox.launcher.lang", LANG);
   } catch (e) {}
-  start();
+  applyLang();
+  if (STATE.me) render();
+  else gate();
 };
 
-// ---------- The library ----------
-const copyBtn = (code) => {
-  const b = h("button", { title: t("Copy") }, t("Copy"));
+// ---------- The shell (rail + view) ----------
+const TABS = [
+  { id: "store", label: "Store", icon: '<path d="M4 9h16l-1 11H5L4 9z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 9V7a4 4 0 0 1 8 0v2" fill="none" stroke="currentColor" stroke-width="1.7"/>' },
+  { id: "library", label: "Library", icon: '<rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/><rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/>' },
+  { id: "downloads", label: "Downloads", icon: '<path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' },
+];
+
+let viewEl, pillEl, tabEls;
+const buildShell = () => {
+  applyLang();
+  tabEls = {};
+  pillEl = h("div.rail__pill");
+  const nav = h("div.rail__nav", pillEl);
+  TABS.forEach((tab) => {
+    const el = h(
+      "button.tab",
+      { onclick: () => route(tab.id) },
+      h("span", { html: `<svg viewBox="0 0 24 24">${tab.icon}</svg>` }).firstChild,
+      h("span", t(tab.label))
+    );
+    tabEls[tab.id] = el;
+    nav.append(el);
+  });
+  const initial = (STATE.me.email || "S").trim().charAt(0).toUpperCase();
+  const acct = h("button.rail__acct", { title: STATE.me.email || "" }, initial);
+  acct.addEventListener("click", (e) => openAccount(e, acct));
+
+  viewEl = h("div.view");
+  app.replaceChildren(h("div.shell", h("aside.rail", nav, h("div.rail__spacer"), acct), viewEl));
+};
+
+const openAccount = (e, anchor) => {
+  document.querySelector(".pop")?.remove();
+  const r = anchor.getBoundingClientRect();
+  const pop = h(
+    "div.pop",
+    h("div.pop__email", { translate: "no" }, STATE.me.email || ""),
+    h(
+      "button.pop__item",
+      { onclick: () => { pop.remove(); toggleLang(); } },
+      svg('<path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      LANG === "fa" ? "English" : "فارسی"
+    ),
+    h(
+      "button.pop__item",
+      { onclick: () => { pop.remove(); invoke("open_url", { url: "https://portal.saufoxentertainment.ir/" }); } },
+      svg('<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1 .8-1 1.7M12 17h.01" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      t("Need help?")
+    ),
+    h(
+      "button.pop__item",
+      { onclick: async () => { pop.remove(); await invoke("sign_out"); boot(); } },
+      svg('<path d="M15 12H4m0 0l4-4m-4 4l4 4M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      t("Sign out")
+    )
+  );
+  pop.style.left = `${r.right + 10}px`;
+  pop.style.bottom = `${window.innerHeight - r.bottom}px`;
+  document.body.append(pop);
+  setTimeout(() => document.addEventListener("pointerdown", function away(ev) {
+    if (!pop.contains(ev.target) && ev.target !== anchor) {
+      pop.remove();
+      document.removeEventListener("pointerdown", away);
+    }
+  }), 0);
+};
+
+const movePill = (id) => {
+  const el = tabEls[id];
+  if (!el || !pillEl) return;
+  pillEl.style.opacity = "1";
+  pillEl.style.transform = `translateY(${el.offsetTop}px)`;
+  for (const k in tabEls) tabEls[k].classList.toggle("is-active", k === id);
+};
+
+// ---------- Router ----------
+const route = (view, param) => {
+  // Remember which list a detail page was opened from, for the Back button.
+  if (view === "detail" && ["store", "library", "downloads"].includes(STATE.view)) STATE.backTab = STATE.view;
+  STATE.view = view;
+  if (view !== "detail") movePill(view);
+  else movePill(STATE.backTab || "store");
+  subs = {};
+  const content =
+    view === "store" ? storeView() : view === "library" ? libraryView() : view === "downloads" ? downloadsView() : detailView(param);
+  const inner = h("div.view__in", content);
+  viewEl.replaceChildren(inner);
+  viewEl.scrollTop = 0;
+  watchReveals(viewEl);
+};
+const render = () => {
+  buildShell();
+  route(STATE.view === "detail" ? "store" : STATE.view);
+};
+
+// ---------- Store ----------
+const storeView = () => {
+  const games = STATE.catalog;
+  const featured = games[0];
+  const wrap = h("div.wrap");
+  if (featured) wrap.append(featuredHero(featured));
+  wrap.append(
+    h("div.head", h("div", h("h2", t("Store — all our games")), h("p", t("Buy on the website, play here.")))),
+    h("div.grid", games.map((g, i) => storeCard(g, i)))
+  );
+  return wrap;
+};
+
+const featuredHero = (g) => {
+  const bg = h("div.feat__bg");
+  bg.style.backgroundImage = `url("${art(g.hero_url || g.cover_url)}")`;
+  if (g.hero_focus) bg.style.backgroundPosition = g.hero_focus;
+  const buy = g.owned
+    ? h("button.button.button--primary.button--lg", { onclick: () => route("detail", g.id) }, t("View"))
+    : h("button.button.button--primary.button--lg", { onclick: () => buyOnSite(g) }, t("Buy on the website"));
+  const feat = h(
+    "div.feat.reveal",
+    bg,
+    h("div.feat__shade"),
+    h(
+      "div.feat__body",
+      h("p.feat__kicker", t("Featured")),
+      h("h2.feat__title", { translate: "no" }, g.title),
+      h("div.feat__meta", ...metaChips(g)),
+      h(
+        "div.feat__actions",
+        buy,
+        h("button.button.button--ghost.button--lg", { onclick: () => route("detail", g.id) }, t("Overview")),
+        g.owned ? h("span.feat__price", { class: "card__own" }, t("Owned")) : h("span.feat__price", money(g))
+      )
+    )
+  );
+  feat.addEventListener("click", (e) => {
+    if (e.target.closest("button")) return;
+    route("detail", g.id);
+  });
+  return feat;
+};
+
+const metaChips = (g) => {
+  const chips = [];
+  if (g.rating) chips.push(h("span.chip", { translate: "no" }, g.rating));
+  (g.platforms || []).forEach((p) => chips.push(h("span.chip", { translate: "no" }, p)));
+  const avg = g.review_count ? g.review_sum / g.review_count : 0;
+  if (g.review_count) chips.push(h("span.chip", stars(avg / 2), ` ${digits(avg.toFixed(1))}`));
+  return chips;
+};
+const stars = (n) => {
+  const full = Math.round(n);
+  return h("span.stars", h("span", "★★★★★".slice(0, full)), h("span.off", "★★★★★".slice(full)));
+};
+
+const storeCard = (g, i) => {
+  const badge = g.owned
+    ? h("span.card__badge.card__badge--own", t("Owned"))
+    : null;
+  const card = tilt(
+    glow(
+      h(
+        "div.card.reveal",
+        { onclick: () => route("detail", g.id) },
+        h(
+          "div.card__art",
+          badge,
+          h("span.card__glin"),
+          h("img", { src: art(g.cover_url), alt: "", onerror: (e) => (e.target.src = "logo.webp") })
+        ),
+        h(
+          "div.card__foot",
+          h("div.card__name", { translate: "no" }, g.title),
+          h("div.card__sub", g.owned ? h("span.card__own", t("In library")) : h("span.card__price", money(g)), h("span", (g.platforms || [])[0] || ""))
+        )
+      )
+    )
+  );
+  return card;
+};
+
+// ---------- Game detail ----------
+const detailView = (id) => {
+  const g = gameById(id);
+  if (!g) return storeView();
+  STATE.detail = id;
+  const wrap = h("div");
+
+  const hero = h("div.detail__hero");
+  const bg = h("div.detail__bg");
+  bg.style.backgroundImage = `url("${art(g.hero_url || g.cover_url)}")`;
+  if (g.hero_focus) bg.style.backgroundPosition = g.hero_focus;
+  hero.append(bg);
+
+  const back = h("button.back", { onclick: () => route(STATE.backTab || "store") }, svg('<path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2"/>'), t("Back"));
+
+  const shots = (g.stills || []).length
+    ? h(
+        "div.shots.reveal",
+        (g.stills || []).map((s, i) =>
+          h("div.shot", { onclick: () => lightbox((g.stills || []).map(art), i) }, h("img", { src: art(s), alt: "", loading: "lazy" }))
+        )
+      )
+    : null;
+
+  const syn = synopsisOf(g);
+  const left = h(
+    "div",
+    h("h1.detail__title", { translate: "no" }, g.title),
+    h("div.detail__meta", ...metaChips(g)),
+    shots,
+    syn ? h("div.reveal", h("h3", { style: "color:var(--text);margin:0 0 8px" }, t("About this game")), h("p.prose", syn)) : null
+  );
+
+  const side = detailSide(g);
+
+  wrap.append(hero, back, h("div.detail__grid", left, side));
+  return wrap;
+};
+
+const detailSide = (g) => {
+  const note = h("p.side-card__note");
+  const bar = h("span");
+  const barWrap = h("div.bar", { hidden: true }, bar);
+  const action = h("button.button.button--primary.button--wide");
+  const extra = h("div");
+
+  const rows = [];
+  if (g.rating) rows.push(["Rating", g.rating]);
+  if ((g.platforms || []).length) rows.push(["Platforms", (g.platforms || []).join(", ")]);
+  if ((g.genres || []).length) rows.push(["Genres", (g.genres || []).join(", ")]);
+  if (g.review_count) rows.push(["Reviews", `${digits(g.review_count)} ${t("reviews")}`]);
+
+  const setPlay = () => {
+    action.textContent = t("Play");
+    action.disabled = false;
+    action.onclick = async () => {
+      action.disabled = true;
+      try {
+        await invoke("play", { workId: g.work_id || g.id, licenseId: g.license_id });
+      } catch (e) {
+        toast(t("Something went wrong. Try again."), "err");
+      }
+      setTimeout(() => (action.disabled = false), 2500);
+    };
+  };
+  const setInstall = (label) => {
+    action.textContent = label;
+    action.disabled = false;
+    action.onclick = () => runInstall(g, { action, note, bar, barWrap, onDone: () => { note.textContent = `v${digits(g.build.version)} · ${t("Installed")}`; setPlay(); } });
+  };
+
+  if (!g.owned) {
+    action.textContent = t("Buy on the website");
+    action.onclick = () => buyOnSite(g);
+    note.textContent = "";
+  } else if (!g.build) {
+    action.textContent = t("Install");
+    action.disabled = true;
+    note.textContent = t("Not available for Windows yet.");
+  } else if (g.installed && g.installed.build_id === g.build.id) {
+    setPlay();
+    note.textContent = `v${digits(g.build.version)} · ${t("Installed")}`;
+  } else if (g.installed) {
+    setInstall(t("Update"));
+    note.textContent = `v${digits(g.build.version)} · ${fmtSize(g.build.size_bytes)}`;
+  } else {
+    setInstall(t("Install"));
+    note.textContent = fmtSize(g.build.size_bytes);
+  }
+
+  // Live progress if this game is mid-install.
+  subscribe(g.work_id || g.id, (s) => {
+    if (s.pct >= 100 && s.phase === "install") return;
+    barWrap.hidden = false;
+    bar.style.width = `${s.pct}%`;
+    note.textContent = phaseText(s);
+  });
+
+  if (g.owned && g.code) {
+    extra.append(
+      h("div.keybox", h("code", { translate: "no" }, g.code), copyMini(g.code)),
+      g.max_devices != null
+        ? h("div.side-card__row", h("span", t("devices")), h("span", `${digits(g.devices || 0)} / ${digits(g.max_devices)}`))
+        : null
+    );
+  }
+
+  return h(
+    "div.side-card.reveal",
+    h("h4", g.owned ? t("Owned") : t("Buy")),
+    g.owned ? h("div.side-card__price", { class: "card__own" }, t("In library")) : h("div.side-card__price", money(g)),
+    action,
+    barWrap,
+    note,
+    ...rows.map(([k, v]) => h("div.side-card__row", h("span", t(k)), h("span", { translate: k === "Rating" || k === "Platforms" || k === "Genres" ? "no" : null }, v))),
+    extra
+  );
+};
+
+const copyMini = (code) => {
+  const b = h("button.mini", t("Copy"));
   b.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(code);
@@ -143,116 +604,54 @@ const copyBtn = (code) => {
   return b;
 };
 
-const gameCard = (game) => {
-  const installed = game.installed;
-  const build = game.build;
-  const note = h("p.card__note");
-  const bar = h("span");
-  const barWrap = h("div.card__bar", { hidden: true }, bar);
-  const action = h("button.button.button--primary.card__action");
-
-  const setPlay = () => {
-    action.textContent = t("Play");
-    action.disabled = false;
-    action.onclick = async () => {
-      action.disabled = true;
-      try {
-        await invoke("play", { workId: game.work_id, licenseId: game.license_id });
-      } catch (e) {
-        note.textContent = t("Something went wrong. Try again.");
-        note.classList.add("is-error");
-      }
-      setTimeout(() => (action.disabled = false), 2500);
-    };
-  };
-  const setInstall = (label) => {
-    action.textContent = label;
-    action.disabled = false;
-    action.onclick = () => doInstall();
-  };
-  const doInstall = async () => {
-    action.disabled = true;
-    note.classList.remove("is-error");
-    note.textContent = "";
-    barWrap.hidden = false;
-    try {
-      await invoke("install_game", {
-        workId: game.work_id,
-        licenseId: game.license_id,
-        buildId: build.id,
-        version: build.version,
-        sha256: build.sha256 || null,
-      });
-      barWrap.hidden = true;
-      game.installed = { version: build.version, build_id: build.id };
-      setPlay();
-    } catch (e) {
-      barWrap.hidden = true;
-      note.classList.add("is-error");
-      const msg = String(e);
-      note.textContent = msg === "device-limit" ? t("You've reached this key's device limit.") : t("Something went wrong. Try again.");
-      setInstall(t("Install"));
-    }
-  };
-
-  progressHandlers[game.work_id] = (p) => {
-    barWrap.hidden = false;
-    const pct = p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : 0;
-    bar.style.width = `${pct}%`;
-    const phase =
-      p.phase === "download" ? `${t("Downloading…")} ${digits(pct)}%` : p.phase === "verify" ? t("Checking…") : p.phase === "install" ? t("Unpacking…") : "";
-    note.textContent = phase;
-  };
-
-  if (!build) {
-    action.textContent = t("Install");
-    action.disabled = true;
-    note.textContent = t("Not available for Windows yet.");
-  } else if (installed && installed.build_id === build.id) {
-    setPlay();
-    note.textContent = `v${digits(build.version)} · ${t("Installed")}`;
-  } else if (installed) {
-    setInstall(t("Update"));
-    note.textContent = `v${digits(build.version)} · ${fmtSize(build.size_bytes)}`;
-  } else {
-    setInstall(t("Install"));
-    note.textContent = fmtSize(build.size_bytes);
+// ---------- Install runner ----------
+const runInstall = async (g, ui) => {
+  const build = g.build;
+  ui.action.disabled = true;
+  ui.note.classList.remove("is-error");
+  ui.barWrap.hidden = false;
+  downloading.add(g.work_id || g.id);
+  try {
+    await invoke("install_game", {
+      workId: g.work_id || g.id,
+      licenseId: g.license_id,
+      buildId: build.id,
+      version: build.version,
+      sha256: build.sha256 || null,
+    });
+    downloading.delete(g.work_id || g.id);
+    delete installState[g.work_id || g.id];
+    g.installed = { version: build.version, build_id: build.id };
+    ui.barWrap.hidden = true;
+    ui.onDone && ui.onDone();
+    toast(`${g.title} · ${t("Installed")}`, "ok");
+    if (STATE.view === "downloads") route("downloads");
+  } catch (e) {
+    downloading.delete(g.work_id || g.id);
+    delete installState[g.work_id || g.id];
+    ui.barWrap.hidden = true;
+    ui.note.classList.add("is-error");
+    const msg = String(e);
+    ui.note.textContent = msg === "device-limit" ? t("You've reached this key's device limit.") : t("Something went wrong. Try again.");
+    ui.action.disabled = false;
+    ui.action.textContent = g.installed ? t("Update") : t("Install");
+    ui.action.onclick = () => runInstall(g, ui);
   }
-
-  return h(
-    "div.card",
-    h(
-      "div.card__art",
-      game.mine ? null : h("span.card__badge", t("gift")),
-      h("img", { src: game.cover_url ? `${SITE}/${game.cover_url}` : "logo.webp", alt: "", onerror: (e) => (e.target.src = "logo.webp") })
-    ),
-    h("div.card__title", { title: game.title, translate: "no" }, game.title || game.work_id),
-    h("div.card__key", h("code", game.code), copyBtn(game.code)),
-    action,
-    barWrap,
-    note
-  );
 };
 
-let progressHandlers = {};
+const buyOnSite = (g) => {
+  invoke("open_url", { url: `${SITE}/checkout?id=${encodeURIComponent(g.id)}` });
+  toast(LANG === "fa" ? "خرید در مرورگر باز شد…" : "Opening checkout in your browser…");
+};
 
-const shell = (me, games) => {
-  applyLang();
-  progressHandlers = {};
-  const grid =
-    games.length === 0
-      ? h(
-          "div.empty",
-          h("img", { src: "logo.webp", alt: "" }),
-          h("p", t("Your library is empty")),
-          h("p", t("Games you buy or unlock will appear here.")),
-          h("button.button", { onclick: () => invoke("open_url", { url: `${SITE}/` }) }, t("Browse games"))
-        )
-      : h("div.grid", games.map(gameCard));
+// ---------- Library ----------
+const libraryView = () => {
+  const games = owned();
+  const wrap = h("div.wrap");
 
   const code = h("input", { type: "text", placeholder: "SFOX-XXXX-XXXX-XXXX-XXXX", maxlength: 24, spellcheck: "false" });
-  const redeemNote = h("p.card__note");
   const addBtn = h("button.button.button--primary", {}, t("Add"));
+  const redeemNote = h("p.side-card__note");
   const doRedeem = async () => {
     const value = code.value.trim();
     if (value.replace(/[^A-Za-z0-9]/g, "").length < 8) return;
@@ -262,7 +661,9 @@ const shell = (me, games) => {
     try {
       await invoke("redeem", { code: value });
       code.value = "";
-      start();
+      toast(t("Added to your library."), "ok");
+      await refresh();
+      route("library");
     } catch (e) {
       addBtn.disabled = false;
       redeemNote.classList.add("is-error");
@@ -277,57 +678,68 @@ const shell = (me, games) => {
   addBtn.addEventListener("click", doRedeem);
   code.addEventListener("keydown", (e) => e.key === "Enter" && doRedeem());
 
-  app.replaceChildren(
-    h(
-      "div.app",
-      h(
-        "header.top",
-        h("img.top__brand", { src: "wordmark.webp", alt: "SauFox" }),
-        h("div.top__spacer"),
-        h(
-          "div.top__me",
-          h("span.top__email", { translate: "no" }, me.email || ""),
-          h("button.top__out", { onclick: toggleLang }, LANG === "fa" ? "English" : "فارسی"),
-          h(
-            "button.top__out",
-            {
-              onclick: async () => {
-                await invoke("sign_out");
-                start();
-              },
-            },
-            t("Sign out")
-          )
-        )
-      ),
-      h(
-        "main.main",
-        h("div.hello", h("h1", t("Your games"))),
-        h("div.redeem", code, addBtn),
-        redeemNote,
-        grid
-      ),
-      h(
-        "footer.foot",
-        h("span", deviceName ? (LANG === "fa" ? `این کامپیوتر: ${deviceName}` : `This PC: ${deviceName}`) : ""),
-        h("a", { onclick: () => invoke("open_url", { url: "https://portal.saufoxentertainment.ir/" }) }, t("Need help?"))
-      )
-    )
+  wrap.append(
+    h("div.head", h("div", h("h2", t("Your library")), h("p", t("Everything you own, ready to install."))), h("div", h("div.redeem", code, addBtn), redeemNote))
   );
+
+  if (games.length === 0) {
+    wrap.append(
+      h(
+        "div.empty",
+        h("img", { src: "logo.webp", alt: "" }),
+        h("p", { style: "color:var(--text);font-weight:700" }, t("Your library is empty")),
+        h("p", t("Games you buy or unlock will appear here.")),
+        h("button.button.button--primary", { onclick: () => route("store") }, t("Browse the store"))
+      )
+    );
+  } else {
+    wrap.append(h("div.grid", games.map((g, i) => storeCard(g, i))));
+  }
+  return wrap;
 };
 
-// ---------- Start ----------
-let deviceName = "";
-let progressBound = false;
-const start = async () => {
-  app.replaceChildren(h("div.loading", h("span")));
-  if (!progressBound) {
-    progressBound = true;
-    listen("install-progress", (e) => {
-      const fn = progressHandlers[e.payload.work_id];
-      if (fn) fn(e.payload);
-    });
+// ---------- Downloads ----------
+const downloadsView = () => {
+  const wrap = h("div.wrap");
+  wrap.append(h("div.head", h("div", h("h2", t("Downloads")))));
+  const active = STATE.catalog.filter((g) => downloading.has(g.work_id || g.id));
+  if (active.length === 0) {
+    wrap.append(
+      h(
+        "div.empty",
+        h("img", { src: "logo.webp", alt: "" }),
+        h("p", { style: "color:var(--text);font-weight:700" }, t("No active downloads")),
+        h("p", t("Installs in progress will show up here."))
+      )
+    );
+    return wrap;
   }
+  const list = h("div.dl");
+  active.forEach((g) => {
+    const bar = h("span");
+    const note = h("div.dl-row__note");
+    subscribe(g.work_id || g.id, (s) => {
+      bar.style.width = `${s.pct}%`;
+      note.textContent = phaseText(s);
+    });
+    list.append(
+      h(
+        "div.dl-row.reveal",
+        h("img", { src: art(g.cover_url), alt: "" }),
+        h("div.dl-row__body", h("div.dl-row__name", { translate: "no" }, g.title), note, h("div.bar", bar)),
+        h("button.mini", { onclick: () => route("detail", g.id) }, t("View"))
+      )
+    );
+  });
+  wrap.append(list);
+  return wrap;
+};
+
+// ---------- Boot ----------
+const boot = async () => {
+  applyLang();
+  app.replaceChildren(h("div.loading", h("span")));
+  bindProgress();
   let me;
   try {
     me = await invoke("me");
@@ -335,18 +747,15 @@ const start = async () => {
     me = null;
   }
   if (!me) return gate();
+  STATE.me = me;
   try {
-    deviceName = (await invoke("device_info")).name || "";
+    STATE.deviceName = (await invoke("device_info")).name || "";
   } catch (e) {}
-  try {
-    const games = await invoke("library");
-    shell(me, games);
-  } catch (e) {
-    // The session may have ended.
-    await invoke("sign_out").catch(() => {});
-    gate(true);
-  }
+  await refresh();
+  STATE.view = "store";
+  render();
 };
 
-window.addEventListener("DOMContentLoaded", start);
-if (document.readyState !== "loading") start();
+wireWindow();
+window.addEventListener("DOMContentLoaded", boot);
+if (document.readyState !== "loading") boot();
