@@ -43,7 +43,10 @@ jobs:
         shell: bash
         run: |
           mkdir out
+          # Keep the versioned installer, and also a stable name so the
+          # website's download page can link to a URL that never changes.
           cp src-tauri/target/release/bundle/nsis/*-setup.exe out/ || true
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe out/SauFox-Setup.exe || true
           ls -la out
 
       - name: Upload artifact
@@ -53,8 +56,15 @@ jobs:
           path: out/*.exe
           if-no-files-found: warn
 
-      - name: Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      # Every push to main refreshes a rolling "latest" release, so
+      # https://github.com/thexfoxy/Launcher.SauFox/releases/latest/download/SauFox-Setup.exe
+      # always points at the newest installer. A version tag also lands here.
+      - name: Publish latest release
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: latest
+          name: SauFox Launcher (latest)
+          body: The newest SauFox launcher for Windows. Download SauFox-Setup.exe and run it.
+          make_latest: true
           files: out/*.exe
