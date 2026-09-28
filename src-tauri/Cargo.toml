@@ -1,6 +1,6 @@
 [package]
 name = "saufox-launcher"
-version = "0.1.2"
+version = "0.1.3"
 description = "SauFox Entertainment launcher"
 authors = ["SauFox Entertainment"]
 edition = "2021"
