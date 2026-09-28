@@ -21,7 +21,16 @@ struct TokenResponse {
     #[serde(default)]
     expires_at: i64,
     #[serde(default)]
+    expires_in: i64,
+    #[serde(default)]
     user: Option<UserPart>,
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 #[derive(Deserialize)]
@@ -34,10 +43,19 @@ struct UserPart {
 
 fn to_session(t: TokenResponse) -> Session {
     let (user_id, email) = t.user.map(|u| (u.id, u.email)).unwrap_or_default();
+    // Prefer the absolute expiry; fall back to expires_in, then to a
+    // conservative hour, so the token is never treated as non-expiring.
+    let expires_at = if t.expires_at > 0 {
+        t.expires_at
+    } else if t.expires_in > 0 {
+        now_secs() + t.expires_in
+    } else {
+        now_secs() + 3600
+    };
     Session {
         access_token: t.access_token,
         refresh_token: t.refresh_token,
-        expires_at: t.expires_at,
+        expires_at,
         email,
         user_id,
     }
@@ -65,11 +83,11 @@ pub async fn verify_otp(token_hash: &str) -> Result<Session, String> {
 /// A valid access token, refreshing the session first if it's about to end.
 pub async fn fresh_token() -> Result<Session, String> {
     let session = session::load().ok_or("signed out")?;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    if session.expires_at == 0 || session.expires_at - now > 120 {
+    let now = now_secs();
+    // A live access token that isn't about to expire is reused as-is. An empty
+    // one means it was just loaded from the keychain (which never keeps the
+    // access token), so it must be minted from the refresh token below.
+    if !session.access_token.is_empty() && session.expires_at - now > 120 {
         return Ok(session);
     }
     let res = client()
