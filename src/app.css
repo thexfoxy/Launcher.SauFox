@@ -17,7 +17,7 @@
 :root {
   --bg: #0a0a0d;
   --bg-2: #101016;
-  --surface: rgba(24, 24, 30, 0.66);
+  --surface: rgba(20, 20, 26, 0.94);
   --glass: rgba(255, 255, 255, 0.045);
   --glass-2: rgba(255, 255, 255, 0.08);
   --line: rgba(255, 255, 255, 0.08);
@@ -84,74 +84,27 @@ a {
   cursor: pointer;
 }
 
-/* ---------- Cyberpunk backdrop ---------- */
+/* ---------- Cyberpunk backdrop ----------
+   Static on purpose: painted once, never animated, no blur filters or blend
+   modes — those made the GPU/CPU work every frame and the app ran hot. */
 .fx {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(120% 120% at 80% -10%, #16131a 0%, var(--bg) 55%);
-}
-.fx__glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  opacity: 0.5;
-  will-change: transform;
-}
-.fx__glow--a {
-  width: 46vw;
-  height: 46vw;
-  top: -12vw;
-  right: -6vw;
-  background: radial-gradient(circle, rgba(255, 122, 26, 0.55), transparent 70%);
-  animation: drift 26s var(--ease) infinite alternate;
-}
-.fx__glow--b {
-  width: 40vw;
-  height: 40vw;
-  bottom: -14vw;
-  left: -8vw;
-  background: radial-gradient(circle, rgba(52, 230, 255, 0.22), transparent 70%);
-  animation: drift 32s var(--ease) infinite alternate-reverse;
-}
-.fx__glow--c {
-  width: 30vw;
-  height: 30vw;
-  top: 40%;
-  left: 55%;
-  background: radial-gradient(circle, rgba(255, 77, 157, 0.16), transparent 70%);
-  animation: drift 38s var(--ease) infinite alternate;
+  background:
+    radial-gradient(45% 55% at 88% -5%, rgba(255, 122, 26, 0.22), transparent 70%),
+    radial-gradient(40% 50% at -5% 105%, rgba(52, 230, 255, 0.08), transparent 70%),
+    radial-gradient(120% 120% at 80% -10%, #16131a 0%, var(--bg) 55%);
 }
 .fx__grid {
   position: absolute;
-  inset: -2px;
+  inset: 0;
   background-image: linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
   background-size: 46px 46px;
   mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 85%);
-}
-.fx__scan {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 0, 0, 0.16) 3px 4px);
-  opacity: 0.4;
-  mix-blend-mode: overlay;
-}
-.fx__noise {
-  position: absolute;
-  inset: 0;
-  opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-@keyframes drift {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(4vw, 4vw, 0) scale(1.15);
-  }
 }
 
 /* ---------- Title bar ---------- */
@@ -166,9 +119,7 @@ a {
   align-items: center;
   justify-content: space-between;
   padding: 0 6px 0 18px;
-  background: linear-gradient(180deg, rgba(10, 10, 13, 0.9), rgba(10, 10, 13, 0.4));
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: rgba(10, 10, 13, 0.96);
   border-bottom: 1px solid var(--line);
 }
 .titlebar__brand {
@@ -260,7 +211,6 @@ a {
   font: 600 14px/1 var(--font);
   color: var(--text);
   background: var(--glass);
-  backdrop-filter: blur(8px);
   cursor: pointer;
   overflow: hidden;
   transition: border-color 0.2s, background 0.2s, transform 0.45s var(--spring), box-shadow 0.3s;
@@ -354,8 +304,6 @@ a {
   text-align: center;
   border-radius: 22px;
   background: var(--surface);
-  backdrop-filter: blur(26px);
-  -webkit-backdrop-filter: blur(26px);
   border: 1px solid var(--line-bright);
   box-shadow: 0 40px 100px -40px rgba(0, 0, 0, 0.9);
   overflow: hidden;
@@ -371,7 +319,6 @@ a {
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: spin 8s linear infinite;
   opacity: 0.6;
 }
 .gate__logo {
@@ -446,8 +393,7 @@ a {
   align-items: center;
   gap: 6px;
   padding: 18px 12px;
-  background: linear-gradient(180deg, rgba(16, 16, 22, 0.7), rgba(10, 10, 13, 0.5));
-  backdrop-filter: blur(20px);
+  background: linear-gradient(180deg, rgba(16, 16, 22, 0.97), rgba(11, 11, 14, 0.97));
   border-right: 1px solid var(--line);
   position: relative;
 }
@@ -551,7 +497,6 @@ a {
   padding: 8px;
   border-radius: 14px;
   background: var(--surface);
-  backdrop-filter: blur(26px);
   border: 1px solid var(--line-bright);
   box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.9);
   animation: pop 0.28s var(--spring) both;
@@ -738,8 +683,6 @@ a {
   background: var(--surface);
   border: 1px solid var(--line);
   transition: transform 0.5s var(--spring), border-color 0.3s, box-shadow 0.4s;
-  transform-style: preserve-3d;
-  will-change: transform;
 }
 .card::after {
   content: "";
@@ -781,7 +724,6 @@ a {
   border-radius: 8px;
   font-size: 11px;
   font-weight: 700;
-  backdrop-filter: blur(8px);
 }
 .card__badge--own {
   background: rgba(87, 214, 163, 0.9);
@@ -864,7 +806,6 @@ a {
   border-radius: 10px;
   border: 1px solid var(--line-bright);
   background: rgba(10, 10, 13, 0.55);
-  backdrop-filter: blur(12px);
   color: var(--soft);
   font-size: 13px;
   cursor: pointer;
@@ -937,7 +878,6 @@ a {
   padding: 20px;
   border-radius: 18px;
   background: var(--surface);
-  backdrop-filter: blur(22px);
   border: 1px solid var(--line-bright);
   box-shadow: 0 30px 70px -40px rgba(0, 0, 0, 0.9);
 }
@@ -1121,7 +1061,6 @@ a {
   place-items: center;
   padding: 40px;
   background: rgba(4, 4, 6, 0.85);
-  backdrop-filter: blur(10px);
   animation: fade 0.3s var(--ease) both;
   cursor: zoom-out;
 }
@@ -1148,7 +1087,6 @@ a {
   padding: 12px 20px;
   border-radius: 12px;
   background: rgba(20, 20, 26, 0.92);
-  backdrop-filter: blur(16px);
   border: 1px solid var(--line-bright);
   color: var(--text);
   font-size: 13px;
