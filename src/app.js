@@ -407,9 +407,17 @@ const featuredHero = (g) => {
   const bg = h("div.feat__bg");
   bg.style.backgroundImage = `url("${art(g.hero_url || g.cover_url)}")`;
   if (g.hero_focus) bg.style.backgroundPosition = g.hero_focus;
-  const buy = g.owned
-    ? h("button.button.button--primary.button--lg", { onclick: () => route("detail", g.id) }, t("View"))
-    : h("button.button.button--primary.button--lg", { onclick: () => buyOnSite(g) }, t("Buy on the website"));
+  // One clear call to action per state — no duplicate "View"/"Overview".
+  const actions = g.owned
+    ? [
+        h("button.button.button--primary.button--lg", { onclick: () => route("detail", g.id) }, t("View")),
+        h("span.feat__price.card__own", t("Owned")),
+      ]
+    : [
+        h("button.button.button--primary.button--lg", { onclick: () => buyOnSite(g) }, t("Buy on the website")),
+        h("button.button.button--ghost.button--lg", { onclick: () => route("detail", g.id) }, t("View")),
+        h("span.feat__price", money(g)),
+      ];
   const feat = h(
     "div.feat.reveal",
     bg,
@@ -419,12 +427,7 @@ const featuredHero = (g) => {
       h("p.feat__kicker", t("Featured")),
       h("h2.feat__title", { translate: "no" }, g.title),
       h("div.feat__meta", ...metaChips(g)),
-      h(
-        "div.feat__actions",
-        buy,
-        h("button.button.button--ghost.button--lg", { onclick: () => route("detail", g.id) }, t("Overview")),
-        g.owned ? h("span.feat__price", { class: "card__own" }, t("Owned")) : h("span.feat__price", money(g))
-      )
+      h("div.feat__actions", ...actions)
     )
   );
   feat.addEventListener("click", (e) => {
