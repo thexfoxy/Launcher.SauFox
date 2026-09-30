@@ -129,30 +129,22 @@ async fn install_game(
     version: String,
     sha256: Option<String>,
 ) -> Result<Value, String> {
-    // Count this computer against the key before the files land.
-    let hash = device::device_hash();
-    let name = device::device_name();
-    let activation = api::activate_device(&license_id, &hash, &name).await?;
-    let ok = activation
-        .as_array()
-        .and_then(|a| a.first())
-        .and_then(|r| r.get("ok"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if !ok {
-        return Err("device-limit".into());
-    }
+    let _guard = install::MUTATION.lock().await;
+    api::authorize_game(&work_id, &license_id).await?;
     let record = install::install(window, work_id, build_id, version, sha256).await?;
     Ok(json!({ "version": record.version, "build_id": record.build_id }))
 }
 
 #[tauri::command]
-fn play(work_id: String, license_id: String) -> Result<(), String> {
-    launch::launch(&work_id, &license_id, &device::device_hash())
+async fn play(work_id: String, license_id: String) -> Result<(), String> {
+    let _guard = install::MUTATION.lock().await;
+    let hash = api::authorize_game(&work_id, &license_id).await?;
+    launch::launch(&work_id, &license_id, &hash)
 }
 
 #[tauri::command]
-fn uninstall(work_id: String) -> Result<(), String> {
+async fn uninstall(work_id: String) -> Result<(), String> {
+    let _guard = install::MUTATION.lock().await;
     install::uninstall(&work_id)
 }
 
@@ -161,10 +153,22 @@ fn device_info() -> Value {
     json!({ "name": device::device_name() })
 }
 
+#[tauri::command]
+async fn devices(license_id: String) -> Result<Value, String> { api::devices(&license_id).await }
+#[tauri::command]
+async fn release_device(license_id: String, device_hash: String) -> Result<Value, String> {
+    api::release_device(&license_id, &device_hash).await
+}
+fn allowed_url(value: &str) -> bool {
+    url::Url::parse(value).map(|u| u.scheme() == "https" && u.username().is_empty()
+        && u.password().is_none() && u.port_or_known_default() == Some(443)
+        && matches!(u.host_str(), Some("saufoxentertainment.ir" | "portal.saufoxentertainment.ir"))).unwrap_or(false)
+}
+
 // Open a saufox link in the default browser (used for help and the site).
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://saufoxentertainment.ir") && !url.starts_with("https://portal.saufoxentertainment.ir") {
+    if !allowed_url(&url) {
         return Err("blocked".into());
     }
     // rundll32, not `cmd /C start`: cmd treats `&` in a query string as a
@@ -197,8 +201,21 @@ pub fn run() {
             play,
             uninstall,
             device_info,
+            devices,
+            release_device,
             open_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running the launcher");
+}
+
+#[cfg(test)]
+mod url_tests {
+    #[test]
+    fn exact_allowed_origin() {
+        assert!(super::allowed_url("https://saufoxentertainment.ir/help?q=a&b=c"));
+        for url in ["https://saufoxentertainment.ir.evil.test", "https://saufoxentertainment.ir@evil.test", "http://saufoxentertainment.ir", "https://saufoxentertainment.ir:444"] {
+            assert!(!super::allowed_url(url));
+        }
+    }
 }

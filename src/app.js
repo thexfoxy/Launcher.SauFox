@@ -575,6 +575,30 @@ const detailSide = (g) => {
   });
 
   if (g.owned && g.code) {
+    const manage = h("button.mini", LANG === "fa" ? "مدیریت دستگاه‌ها" : "Manage devices");
+    const deviceList = h("div");
+    manage.addEventListener("click", async () => {
+      manage.disabled = true;
+      try {
+        const devices = await invoke("devices", { licenseId: g.license_id });
+        deviceList.replaceChildren();
+        for (const device of devices) {
+          const release = h("button.mini", LANG === "fa" ? "آزاد کردن" : "Release");
+          const row = h("div.side-card__row", h("span", device.device_name || "PC"), release);
+          release.addEventListener("click", async () => {
+            release.disabled = true;
+            try {
+              await invoke("release_device", { licenseId: g.license_id, deviceHash: device.device_hash });
+              row.remove();
+            } catch { release.disabled = false; note.textContent = t("Something went wrong. Try again."); }
+          });
+          deviceList.append(row);
+        }
+        if (!devices.length) deviceList.textContent = LANG === "fa" ? "دستگاهی ثبت نشده است." : "No devices registered.";
+      } catch { note.textContent = t("Something went wrong. Try again."); }
+      finally { manage.disabled = false; }
+    });
+    extra.append(manage, deviceList);
     extra.append(
       h("div.keybox", h("code", { translate: "no" }, g.code), copyMini(g.code)),
       g.max_devices != null

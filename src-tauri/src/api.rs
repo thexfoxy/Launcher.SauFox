@@ -82,6 +82,8 @@ pub async fn verify_otp(token_hash: &str) -> Result<Session, String> {
 
 /// A valid access token, refreshing the session first if it's about to end.
 pub async fn fresh_token() -> Result<Session, String> {
+    static REFRESH: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _guard = REFRESH.lock().await;
     let session = session::load().ok_or("signed out")?;
     let now = now_secs();
     // A live access token that isn't about to expire is reused as-is. An empty
@@ -99,8 +101,11 @@ pub async fn fresh_token() -> Result<Session, String> {
         .await
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
-        session::clear();
-        return Err("session expired".into());
+        if matches!(res.status().as_u16(), 400 | 401 | 403) {
+            session::clear();
+            return Err("session expired".into());
+        }
+        return Err("session refresh unavailable; try again".into());
     }
     let token: TokenResponse = res.json().await.map_err(|e| e.to_string())?;
     let mut next = to_session(token);
@@ -201,27 +206,48 @@ pub async fn builds(work_id: &str) -> Result<Value, String> {
 }
 
 /// A one-hour link to download a build's file.
-pub async fn download_link(build_id: &str) -> Result<(String, String, u64), String> {
+#[derive(Deserialize)]
+pub struct Download {
+    pub url: String,
+    pub file_name: String,
+    pub size_bytes: u64,
+    pub sha256: String,
+    pub entrypoint: String,
+    pub work_id: String,
+    pub version: String,
+    pub platform: String,
+}
+pub async fn download_link(build_id: &str) -> Result<Download, String> {
     let session = fresh_token().await?;
     let res = client()
         .post(format!("{SUPABASE_URL}/functions/v1/library"))
         .header("apikey", SUPABASE_ANON_KEY)
-        .header("Authorization", format!("Bearer {}", session.access_token))
-        .header("Content-Type", "application/json")
+        .bearer_auth(session.access_token)
         .json(&json!({ "action": "download", "build_id": build_id, "source": "launcher" }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let body: Value = res.json().await.map_err(|e| e.to_string())?;
-    if let Some(url) = body.get("url").and_then(|v| v.as_str()) {
-        let name = body.get("file_name").and_then(|v| v.as_str()).unwrap_or("game.zip").to_string();
-        let size = body.get("size_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
-        Ok((url.to_string(), name, size))
-    } else {
-        Err(body
-            .get("error")
-            .and_then(|v| v.as_str())
-            .unwrap_or("download refused")
-            .to_string())
-    }
+        .send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() { return Err(format!("download refused ({})", res.status())); }
+    res.json().await.map_err(|e| e.to_string())
+}
+
+pub async fn devices(license_id: &str) -> Result<Value, String> {
+    let session = fresh_token().await?;
+    let res = client().get(format!("{SUPABASE_URL}/rest/v1/license_devices"))
+        .query(&[("select", "device_hash,device_name,last_seen_at"), ("license_id", &format!("eq.{license_id}"))])
+        .header("apikey", SUPABASE_ANON_KEY).bearer_auth(session.access_token)
+        .send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() { return Err(format!("server error ({})", res.status())); }
+    res.json().await.map_err(|e| e.to_string())
+}
+pub async fn release_device(license_id: &str, hash: &str) -> Result<Value, String> {
+    rpc("release_device", json!({"p_license": license_id, "p_device_hash": hash})).await
+}
+pub async fn authorize_game(work_id: &str, license_id: &str) -> Result<String, String> {
+    let licenses = my_licenses().await?;
+    if !licenses.as_array().map(|rows| rows.iter().any(|row|
+        row["license_id"].as_str() == Some(license_id) && row["work_id"].as_str() == Some(work_id)
+    )).unwrap_or(false) { return Err("Not your license".into()); }
+    let hash = crate::device::device_hash()?;
+    let result = activate_device(license_id, &hash, &crate::device::device_name()).await?;
+    if result[0]["ok"].as_bool() != Some(true) { return Err("device-limit".into()); }
+    Ok(hash)
 }
