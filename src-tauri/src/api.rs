@@ -6,10 +6,12 @@ use crate::config::{SUPABASE_ANON_KEY, SUPABASE_URL};
 use crate::session::{self, Session};
 use serde::Deserialize;
 use serde_json::{json, Value};
+pub static SESSION_CHANGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn client() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent("SauFoxLauncher/0.1")
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .expect("client")
 }
@@ -63,6 +65,7 @@ fn to_session(t: TokenResponse) -> Session {
 
 /// Exchange the one-time token from the website's sign-in for a session.
 pub async fn verify_otp(token_hash: &str) -> Result<Session, String> {
+    let _guard = SESSION_CHANGE.lock().await;
     let res = client()
         .post(format!("{SUPABASE_URL}/auth/v1/verify"))
         .header("apikey", SUPABASE_ANON_KEY)
@@ -82,8 +85,7 @@ pub async fn verify_otp(token_hash: &str) -> Result<Session, String> {
 
 /// A valid access token, refreshing the session first if it's about to end.
 pub async fn fresh_token() -> Result<Session, String> {
-    static REFRESH: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-    let _guard = REFRESH.lock().await;
+    let _guard = SESSION_CHANGE.lock().await;
     let session = session::load().ok_or("signed out")?;
     let now = now_secs();
     // A live access token that isn't about to expire is reused as-is. An empty

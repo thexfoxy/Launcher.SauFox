@@ -145,4 +145,29 @@ mod tests {
         assert!(replace(&root.join("missing"), &dir, &root.join("backup")).is_err());
         assert_eq!(fs::read(dir.join("old.exe")).unwrap(), b"old"); fs::remove_dir_all(root).unwrap();
     }
+    #[test]
+    fn corrupt_zip_and_traversal_are_rejected_without_touching_existing_files() {
+        let mut bytes = [0u8; 16]; getrandom::getrandom(&mut bytes).unwrap();
+        let root = std::env::temp_dir().join(hex::encode(bytes));
+        let stage = root.join("stage"); fs::create_dir_all(&stage).unwrap();
+        let archive = root.join("build.zip");
+        fs::write(&archive, b"not a zip").unwrap();
+        assert!(unpack(&archive, &stage, "build.zip", "Game.exe").is_err());
+        let mut zip = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+        zip.start_file("../escape.exe", zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(b"bad").unwrap(); zip.finish().unwrap();
+        assert!(unpack(&archive, &stage, "build.zip", "Game.exe").is_err());
+        assert!(!root.join("escape.exe").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn only_the_declared_executable_is_used() {
+        let mut bytes = [0u8; 16]; getrandom::getrandom(&mut bytes).unwrap();
+        let root = std::env::temp_dir().join(hex::encode(bytes)); fs::create_dir_all(root.join("bin")).unwrap();
+        fs::write(root.join("CrashReporter.exe"), b"helper").unwrap();
+        fs::write(root.join("bin/Game.exe"), b"game").unwrap();
+        assert_eq!(checked_executable(&root, "bin/Game.exe").unwrap(), root.join("bin/Game.exe").canonicalize().unwrap());
+        assert!(checked_executable(&root, "Missing.exe").is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
 }

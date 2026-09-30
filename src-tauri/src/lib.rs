@@ -26,7 +26,8 @@ async fn sign_in() -> Result<Value, String> {
 }
 
 #[tauri::command]
-fn sign_out() {
+async fn sign_out() {
+    let _guard = api::SESSION_CHANGE.lock().await;
     session::clear();
 }
 
