@@ -1,6 +1,6 @@
 [package]
 name = "saufox-launcher"
-version = "0.1.6"
+version = "0.1.7"
 description = "SauFox Entertainment launcher"
 authors = ["SauFox Entertainment"]
 edition = "2021"
@@ -25,6 +25,7 @@ futures-util = "0.3"
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 sha2 = "0.10"
 hex = "0.4"
+getrandom = "0.2"
 zip = "2"
 dirs = "5"
 url = "2"

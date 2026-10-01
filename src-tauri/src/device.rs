@@ -4,26 +4,20 @@
 use crate::config::KEYRING_SERVICE;
 use sha2::{Digest, Sha256};
 
-fn machine_salt() -> String {
-    // A per-install random secret, so the hash can't be guessed from public
-    // machine facts and can't be reproduced on another computer.
-    let entry = keyring::Entry::new(KEYRING_SERVICE, "device-salt");
-    if let Ok(e) = &entry {
-        if let Ok(v) = e.get_password() {
-            if !v.is_empty() {
-                return v;
-            }
-        }
+fn machine_salt() -> Result<String, String> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOCK.lock().map_err(|_| "device key unavailable")?;
+    let entry = keyring::Entry::new(KEYRING_SERVICE, "device-salt").map_err(|e| e.to_string())?;
+    match entry.get_password() {
+        Ok(value) if !value.is_empty() => return Ok(value),
+        Ok(_) | Err(keyring::Error::NoEntry) => {},
+        Err(e) => return Err(e.to_string()),
     }
-    let mut seed = Sha256::new();
-    seed.update(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0).to_le_bytes());
-    seed.update(std::process::id().to_le_bytes());
-    seed.update(hostname().as_bytes());
-    let salt = hex::encode(seed.finalize());
-    if let Ok(e) = &entry {
-        let _ = e.set_password(&salt);
-    }
-    salt
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).map_err(|e| e.to_string())?;
+    let salt = hex::encode(bytes);
+    entry.set_password(&salt).map_err(|e| e.to_string())?;
+    Ok(salt)
 }
 
 fn hostname() -> String {
@@ -56,12 +50,12 @@ fn os_id() -> String {
 }
 
 /// A 64-hex-character id for this computer.
-pub fn device_hash() -> String {
+pub fn device_hash() -> Result<String, String> {
     let mut h = Sha256::new();
     h.update(b"saufox-device-v1");
     h.update(os_id().as_bytes());
-    h.update(machine_salt().as_bytes());
-    hex::encode(h.finalize())
+    h.update(machine_salt()?.as_bytes());
+    Ok(hex::encode(h.finalize()))
 }
 
 /// A friendly name to show the owner in their device list.

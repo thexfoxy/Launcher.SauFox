@@ -7,14 +7,10 @@ use crate::config::SITE;
 use crate::session::Session;
 use std::time::{Duration, Instant};
 
-fn random_state() -> String {
-    // 32 hex chars from the OS keychain-quality randomness we already use.
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0).to_le_bytes());
-    h.update(std::process::id().to_le_bytes());
-    h.update(Instant::now().elapsed().as_nanos().to_le_bytes());
-    hex::encode(&h.finalize()[..16])
+fn random_state() -> Result<String, String> {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(hex::encode(bytes))
 }
 
 fn query_of(url: &str) -> Vec<(String, String)> {
@@ -53,7 +49,7 @@ const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>SauFox</title
 pub async fn sign_in() -> Result<Session, String> {
     let server = tiny_http::Server::http("127.0.0.1:0").map_err(|e| e.to_string())?;
     let port = server.server_addr().to_ip().map(|a| a.port()).ok_or("no port")?;
-    let state = random_state();
+    let state = random_state()?;
 
     let url = format!("{SITE}/launcher?port={port}&state={state}");
     if webbrowser_open(&url).is_err() {
@@ -71,7 +67,7 @@ pub async fn sign_in() -> Result<Session, String> {
             match server.recv_timeout(Duration::from_secs(2)) {
                 Ok(Some(request)) => {
                     let url = request.url().to_string();
-                    if !url.starts_with("/callback") {
+                    if url.split('?').next() != Some("/callback") {
                         let _ = request.respond(tiny_http::Response::empty(404));
                         continue;
                     }
