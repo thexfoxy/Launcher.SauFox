@@ -122,6 +122,22 @@ const FA = {
   "Friends ✓": "دوست ✓",
   "Playtime": "زمان بازی",
   "Member since {when}": "عضو از {when}",
+  Message: "پیام",
+  "Write a message…": "پیامی بنویسید…",
+  Send: "ارسال",
+  "Say hi to {name}!": "به {name} سلام کنید!",
+  "Slow down a little.": "کمی آهسته‌تر.",
+  "You can only message friends.": "فقط به دوستانتان می‌توانید پیام بدهید.",
+  Block: "مسدود کردن",
+  "Tap again to block": "برای مسدود کردن دوباره بزنید",
+  Unblock: "رفع مسدودی",
+  Blocked: "مسدودشده‌ها",
+  "Blocked.": "مسدود شد.",
+  "They can't message you or send requests, and you're no longer friends.": "دیگر نمی‌تواند به شما پیام یا درخواست بدهد و دوستی‌تان برداشته شد.",
+  "You've sent too many requests. Wait for some answers first.": "درخواست‌های زیادی فرستاده‌اید. اول منتظر جواب چندتایشان بمانید.",
+  "Load earlier": "پیام‌های قبلی",
+  Close: "بستن",
+  Today: "امروز",
 };
 let LANG = "en";
 try {
@@ -414,7 +430,7 @@ const openAccount = (e, anchor) => {
     ),
     h(
       "button.pop__item",
-      { onclick: async () => { pop.remove(); await invoke("sign_out"); boot(); } },
+      { onclick: async () => { pop.remove(); closeChat(); CHAT.lastId = null; onlineTimers.forEach(clearInterval); await invoke("sign_out"); boot(); } },
       svg('<path d="M15 12H4m0 0l4-4m-4 4l4 4M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
       t("Sign out")
     )
@@ -866,7 +882,7 @@ const goOnline = () => {
   loadFriends();
   loadPlaytime();
   loadMyProfile();
-  onlineTimers = [setInterval(beat, 60000), setInterval(loadFriends, 30000)];
+  onlineTimers = [setInterval(beat, 60000), setInterval(loadFriends, 30000), setInterval(pollInbox, 4000)];
   if (onlineListening) return;
   onlineListening = true;
   listen("game-started", (e) => {
@@ -884,6 +900,8 @@ const loadFriends = async () => {
   } catch (e) {
     return;
   }
+  // Start the message feed after the newest message there already is.
+  if (CHAT.lastId == null) CHAT.lastId = Math.max(0, ...STATE.friends.map((f) => Number(f.last_message_id) || 0));
   updateFriendBadge();
   // Redraw the friends page in place, unless the member is typing in it.
   if (STATE.view === "friends" && !viewEl.contains(document.activeElement)) route("friends");
@@ -905,7 +923,9 @@ const loadMyProfile = async () => {
 const updateFriendBadge = () => {
   const badge = document.querySelector(".tab__badge");
   if (!badge) return;
-  const waiting = STATE.friends.filter((f) => f.relation === "received").length;
+  const waiting =
+    STATE.friends.filter((f) => f.relation === "received").length +
+    STATE.friends.reduce((n, f) => n + (f.relation === "friend" ? Number(f.unread) || 0 : 0), 0);
   badge.hidden = !waiting;
   badge.textContent = digits(waiting);
 };
@@ -940,6 +960,7 @@ const friendsView = () => {
         self: "That's you.",
         already: "You're already friends.",
         pending: "Already sent; waiting for them.",
+        limit: "You've sent too many requests. Wait for some answers first.",
       }[r];
       note.textContent = t(msg || "Something went wrong. Try again.");
       note.classList.toggle("is-error", !["sent", "accepted"].includes(r));
@@ -988,7 +1009,38 @@ const friendsView = () => {
     if (!list.length) continue;
     wrap.append(h("h3.flist__title", `${t(title)} (${digits(list.length)})`), h("div.flist", list.map(friendRow)));
   }
+  wrap.append(blockedSection());
   return wrap;
+};
+
+// People you've blocked, with Unblock (loaded on demand, rarely needed).
+const blockedSection = () => {
+  const box = h("div");
+  invoke("social_call", { action: "my_blocks" })
+    .then((rows) => {
+      if (!rows || !rows.length) return;
+      box.append(
+        h("h3.flist__title", `${t("Blocked")} (${digits(rows.length)})`),
+        h(
+          "div.flist",
+          rows.map((b) => {
+            const un = h("button.mini", t("Unblock"));
+            un.addEventListener("click", async () => {
+              un.disabled = true;
+              try {
+                await invoke("social_call", { action: "unblock_user", args: { p_user: b.user_id } });
+                route("friends");
+              } catch (e) {
+                un.disabled = false;
+              }
+            });
+            return h("div.frow", h("span.frow__who", avatarEl(b, 44), h("span.frow__text", h("span.frow__name", { translate: "no" }, b.handle || "—"))), h("div.frow__actions", un));
+          })
+        )
+      );
+    })
+    .catch(() => {});
+  return box;
 };
 
 const friendRow = (f) => {
@@ -1009,6 +1061,17 @@ const friendRow = (f) => {
       h("button.mini", { onclick: () => act(() => invoke("social_call", { action: "friend_respond", args: { p_user: f.user_id, p_accept: false } })) }, t("Decline"))
     );
   } else {
+    if (f.relation === "friend") {
+      const unread = Number(f.unread) || 0;
+      actions.append(
+        h(
+          "button.mini.mini--accent",
+          { onclick: (e) => { e.stopPropagation(); openChat(f); } },
+          t("Message"),
+          unread ? h("span.mini__count", digits(unread)) : null
+        )
+      );
+    }
     const remove = h("button.mini", f.relation === "sent" ? t("Cancel") : t("Remove"));
     remove.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1081,8 +1144,46 @@ const profileCard = (p) => {
       }
     });
     actions.append(add);
+  } else if (p.relation === "blocked") {
+    const un = h("button.button.button--ghost", t("Unblock"));
+    un.addEventListener("click", async () => {
+      un.disabled = true;
+      try {
+        await invoke("social_call", { action: "unblock_user", args: { p_user: p.user_id } });
+        route("user", p.handle);
+      } catch (e) {
+        un.disabled = false;
+      }
+    });
+    actions.append(un);
   } else {
     actions.append(h("span.chip", p.relation === "friend" ? t("Friends ✓") : t("Request sent")));
+    if (p.relation === "friend") actions.append(h("button.button.button--primary", { onclick: () => openChat({ user_id: p.user_id, handle: p.handle, avatar_url: p.avatar_url, online: p.online, playing_title: p.playing && p.playing.title }) }, t("Message")));
+  }
+  if (p.relation !== "self" && p.relation !== "blocked" && p.user_id) {
+    const block = h("button.button.button--ghost.button--danger", t("Block"));
+    block.addEventListener("click", async () => {
+      if (!block.classList.contains("is-asking")) {
+        block.classList.add("is-asking");
+        block.textContent = t("Tap again to block");
+        setTimeout(() => {
+          block.classList.remove("is-asking");
+          block.textContent = t("Block");
+        }, 3500);
+        return;
+      }
+      block.disabled = true;
+      try {
+        await invoke("social_call", { action: "block_user", args: { p_user: p.user_id } });
+        if (CHAT.with && CHAT.with.user_id === p.user_id) closeChat();
+        toast(`${t("Blocked.")} ${t("They can't message you or send requests, and you're no longer friends.")}`, "ok");
+        await loadFriends();
+        route("user", p.handle);
+      } catch (e) {
+        block.disabled = false;
+      }
+    });
+    actions.append(block);
   }
   actions.append(
     h("button.button.button--ghost", { onclick: () => invoke("open_url", { url: `${SITE}/players/${encodeURIComponent(p.handle)}` }) }, t("View on the website"))
@@ -1184,6 +1285,174 @@ const profileForm = (first) => {
     note,
     h("div.prof__actions", save, first ? null : h("button.button.button--ghost", { onclick: () => route("profile") }, t("Cancel")))
   );
+};
+
+// ---------- Chat ----------
+// A panel at the side, so the store and library stay usable while talking.
+// New messages come from inbox(), asked every 4 seconds; the server only
+// lets friends who haven't blocked each other write, 30 messages a minute.
+const CHAT = { lastId: null, with: null, el: null, list: null, oldest: null, polling: false };
+
+const timeText = (iso) => {
+  const d = new Date(iso);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  const loc = LANG === "fa" ? "fa-IR" : "en-GB";
+  return sameDay ? d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" }) : d.toLocaleString(loc, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
+const bubble = (m) =>
+  h(
+    `div.msg${m.sender_id === STATE.me.user_id ? ".is-mine" : ""}`,
+    { "data-id": m.id },
+    h("p.msg__body", { dir: "auto" }, m.body),
+    h("span.msg__time", timeText(m.created_at))
+  );
+
+const scrollChat = () => {
+  if (CHAT.list) CHAT.list.scrollTop = CHAT.list.scrollHeight;
+};
+
+const closeChat = () => {
+  if (!CHAT.el) return;
+  const el = CHAT.el;
+  CHAT.el = CHAT.list = CHAT.with = null;
+  el.classList.add("is-leaving");
+  setTimeout(() => el.remove(), reduce ? 0 : 220);
+};
+
+const openChat = async (friend) => {
+  if (CHAT.with && CHAT.with.user_id === friend.user_id) return CHAT.el.querySelector("textarea").focus();
+  if (CHAT.el) CHAT.el.remove();
+  CHAT.with = friend;
+  CHAT.oldest = null;
+  const list = h("div.chat__list", h("div.loading", h("span")));
+  const input = h("textarea", { rows: 1, maxlength: 2000, placeholder: t("Write a message…"), dir: "auto" });
+  const sendBtn = h("button.chat__send", { "aria-label": t("Send") }, svg('<path d="M4 12l16-8-6 16-2.5-6.5L4 12z" fill="currentColor"/>'));
+  const note = h("p.chat__note");
+  const status = h("span.chat__status", friend.relation === "friend" || friend.online != null ? statusText(friend) : "");
+  const panel = h(
+    "aside.chat",
+    h(
+      "header.chat__head",
+      h("button.chat__who", { onclick: () => friend.handle && route("user", friend.handle) }, avatarEl(friend, 36), h("span.chat__names", h("strong", { translate: "no" }, friend.handle), status)),
+      h("button.chat__x", { onclick: closeChat, "aria-label": t("Close") }, svg('<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'))
+    ),
+    list,
+    note,
+    h("div.chat__compose", input, sendBtn)
+  );
+  CHAT.el = panel;
+  CHAT.list = list;
+  document.body.append(panel);
+  input.focus();
+
+  const grow = () => {
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+  };
+  const send = async () => {
+    const body = input.value.trim();
+    if (!body || sendBtn.disabled) return;
+    sendBtn.disabled = true;
+    note.textContent = "";
+    try {
+      const m = await invoke("social_call", { action: "send_message", args: { p_to: friend.user_id, p_body: body } });
+      input.value = "";
+      grow();
+      if (m && !list.querySelector(`[data-id="${m.id}"]`)) {
+        list.querySelector(".chat__empty")?.remove();
+        list.append(bubble(m));
+        scrollChat();
+      }
+    } catch (e) {
+      const c = String(e);
+      note.textContent = c.includes("SF042") ? t("Slow down a little.") : c.includes("SF041") ? t("You can only message friends.") : t("Something went wrong. Try again.");
+    }
+    sendBtn.disabled = false;
+    input.focus();
+  };
+  sendBtn.addEventListener("click", send);
+  input.addEventListener("input", grow);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    } else if (e.key === "Escape") closeChat();
+  });
+
+  const loadPage = async () => {
+    const rows = (await invoke("social_call", { action: "chat_history", args: { p_with: friend.user_id, p_before: CHAT.oldest, p_limit: 50 } })) || [];
+    if (CHAT.with !== friend) return;
+    const first = !CHAT.oldest;
+    if (rows.length) CHAT.oldest = rows[rows.length - 1].id;
+    const frag = rows.slice().reverse().map(bubble);
+    if (first) {
+      list.replaceChildren(...frag);
+      if (!rows.length) list.append(h("p.chat__empty", tf("Say hi to {name}!", { name: friend.handle })));
+      scrollChat();
+    } else {
+      const before = list.scrollHeight;
+      list.querySelector(".chat__more")?.remove();
+      list.prepend(...frag);
+      list.scrollTop = list.scrollHeight - before;
+    }
+    if (rows.length === 50) {
+      const more = h("button.chat__more", t("Load earlier"));
+      more.addEventListener("click", () => {
+        more.disabled = true;
+        loadPage().catch(() => (more.disabled = false));
+      });
+      list.prepend(more);
+    }
+  };
+  try {
+    await loadPage();
+    await invoke("social_call", { action: "mark_read", args: { p_with: friend.user_id } });
+    const f = STATE.friends.find((x) => x.user_id === friend.user_id);
+    if (f) f.unread = 0;
+    updateFriendBadge();
+  } catch (e) {
+    list.replaceChildren(h("p.chat__empty", t("Something went wrong. Try again.")));
+  }
+};
+
+const pollInbox = async () => {
+  if (CHAT.polling || CHAT.lastId == null) return;
+  CHAT.polling = true;
+  try {
+    const rows = (await invoke("social_call", { action: "inbox", args: { p_after: CHAT.lastId } })) || [];
+    let readOpen = false;
+    for (const m of rows) {
+      CHAT.lastId = Math.max(CHAT.lastId, Number(m.id));
+      const other = m.sender_id === STATE.me.user_id ? m.recipient_id : m.sender_id;
+      const open = CHAT.with && CHAT.with.user_id === other;
+      if (open && !CHAT.list.querySelector(`[data-id="${m.id}"]`)) {
+        CHAT.list.querySelector(".chat__empty")?.remove();
+        CHAT.list.append(bubble(m));
+        scrollChat();
+        if (m.sender_id === other) readOpen = true;
+      } else if (!open && m.sender_id === other) {
+        const f = STATE.friends.find((x) => x.user_id === other);
+        if (f) {
+          f.unread = (Number(f.unread) || 0) + 1;
+          const t0 = h("div.toast.is-msg", { role: "status" }, avatarEl(f, 28), h("span", { dir: "auto" }, h("strong", { translate: "no" }, f.handle), " ", m.body.length > 80 ? `${m.body.slice(0, 80)}…` : m.body));
+          t0.addEventListener("click", () => {
+            t0.remove();
+            openChat(f);
+          });
+          document.querySelector(".toast")?.remove();
+          document.body.append(t0);
+          setTimeout(() => t0.remove(), 5000);
+        }
+      }
+    }
+    if (readOpen) invoke("social_call", { action: "mark_read", args: { p_with: CHAT.with.user_id } }).catch(() => {});
+    if (rows.length) {
+      updateFriendBadge();
+      if (STATE.view === "friends" && !viewEl.contains(document.activeElement)) route("friends");
+    }
+  } catch (e) {}
+  CHAT.polling = false;
 };
 
 // ---------- Boot ----------

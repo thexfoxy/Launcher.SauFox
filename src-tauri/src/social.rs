@@ -11,7 +11,21 @@ use tauri::{AppHandle, Emitter};
 static PLAYING: Mutex<Option<String>> = Mutex::new(None);
 
 /// The functions the window may call by name. Anything else is refused.
-const ALLOWED: &[&str] = &["my_friends", "friend_request", "friend_respond", "friend_remove", "public_profile", "my_playtime"];
+const ALLOWED: &[&str] = &[
+    "my_friends",
+    "friend_request",
+    "friend_respond",
+    "friend_remove",
+    "public_profile",
+    "my_playtime",
+    "send_message",
+    "chat_history",
+    "inbox",
+    "mark_read",
+    "block_user",
+    "unblock_user",
+    "my_blocks",
+];
 
 pub fn playing() -> Option<String> {
     PLAYING.lock().ok().and_then(|p| p.clone())
