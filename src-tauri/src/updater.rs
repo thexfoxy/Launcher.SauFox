@@ -40,7 +40,7 @@ async fn run(app: AppHandle, update: Update) {
     let info = json!({ "version": update.version, "current": update.current_version });
     let window = WebviewWindowBuilder::new(&app, "update", WebviewUrl::App("update.html".into()))
         .title("SauFox")
-        .inner_size(460.0, 300.0)
+        .inner_size(540.0, 280.0)
         .resizable(false)
         .maximizable(false)
         .decorations(false)
