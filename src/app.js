@@ -1085,7 +1085,7 @@ const profileCard = (p) => {
     actions.append(h("span.chip", p.relation === "friend" ? t("Friends ✓") : t("Request sent")));
   }
   actions.append(
-    h("button.button.button--ghost", { onclick: () => invoke("open_url", { url: `${SITE}/user?u=${encodeURIComponent(p.handle)}` }) }, t("View on the website"))
+    h("button.button.button--ghost", { onclick: () => invoke("open_url", { url: `${SITE}/players/${encodeURIComponent(p.handle)}` }) }, t("View on the website"))
   );
 
   const head = h(
