@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "What the launcher window may do.",
-  "windows": ["main"],
+  "windows": ["main", "update"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",

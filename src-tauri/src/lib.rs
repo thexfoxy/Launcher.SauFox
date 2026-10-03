@@ -11,6 +11,7 @@ mod launch;
 mod paths;
 mod session;
 mod social;
+mod updater;
 
 use serde_json::{json, Value};
 use tauri::Window;
@@ -223,6 +224,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            // The main window starts hidden; this shows it, or the update.
+            updater::start(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             me,
             sign_in,

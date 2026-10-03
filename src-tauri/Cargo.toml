@@ -1,6 +1,6 @@
 [package]
 name = "saufox-launcher"
-version = "0.3.0"
+version = "0.4.0"
 description = "SauFox Entertainment launcher"
 authors = ["SauFox Entertainment"]
 edition = "2021"
@@ -31,6 +31,7 @@ dirs = "5"
 url = "2"
 tiny_http = "0.12"
 thiserror = "1"
+tauri-plugin-updater = "2"
 
 [profile.release]
 opt-level = "s"

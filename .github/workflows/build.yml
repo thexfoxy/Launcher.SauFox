@@ -36,8 +36,23 @@ jobs:
       - name: Icons
         run: npm run tauri icon app-icon.png
 
+      # Updates are signed with the studio's private key (repository
+      # secrets TAURI_SIGNING_PRIVATE_KEY and _PASSWORD); the launcher only
+      # installs an update whose signature matches the public key built into
+      # it (tauri.conf.json). Without the secret the installer is still
+      # built, just without an update for existing launchers.
       - name: Build
-        run: npm run tauri build
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            npx tauri build
+          else
+            echo "::warning::No signing key: building without an update for existing launchers."
+            npx tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
 
       - name: Collect installer
         shell: bash
@@ -47,13 +62,34 @@ jobs:
           # website's download page can link to a URL that never changes.
           cp src-tauri/target/release/bundle/nsis/*-setup.exe out/ || true
           cp src-tauri/target/release/bundle/nsis/*-setup.exe out/SauFox-Setup.exe || true
+          # The update list launchers read (latest.json): the new version,
+          # its installer on the rolling "latest" release and its signature.
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          EXE="SauFox_${VERSION}_x64-setup.exe"
+          SIG="src-tauri/target/release/bundle/nsis/${EXE}.sig"
+          if [ -f "$SIG" ]; then
+            VERSION="$VERSION" EXE="$EXE" SIG="$SIG" node -e '
+              const fs = require("fs");
+              fs.writeFileSync("out/latest.json", JSON.stringify({
+                version: process.env.VERSION,
+                notes: "SauFox launcher " + process.env.VERSION,
+                pub_date: new Date().toISOString(),
+                platforms: { "windows-x86_64": {
+                  signature: fs.readFileSync(process.env.SIG, "utf8").trim(),
+                  url: "https://github.com/thexfoxy/Launcher.SauFox/releases/download/latest/" + process.env.EXE,
+                } },
+              }, null, 2));'
+            cat out/latest.json
+          fi
           ls -la out
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SauFox-launcher-windows
-          path: out/*.exe
+          path: |
+            out/*.exe
+            out/latest.json
           if-no-files-found: warn
 
       # Every push to main refreshes a rolling "latest" release, so
@@ -67,4 +103,6 @@ jobs:
           name: SauFox Launcher (latest)
           body: The newest SauFox launcher for Windows. Download SauFox-Setup.exe and run it.
           make_latest: true
-          files: out/*.exe
+          files: |
+            out/*.exe
+            out/latest.json
