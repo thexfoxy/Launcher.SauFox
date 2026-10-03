@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 pub static SESSION_CHANGE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-fn client() -> reqwest::Client {
+pub(crate) fn client() -> reqwest::Client {
     reqwest::Client::builder()
         .user_agent("SauFoxLauncher/0.1")
         .timeout(std::time::Duration::from_secs(30))
@@ -133,7 +133,13 @@ async fn rpc(name: &str, body: Value) -> Result<Value, String> {
         .await
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
-        return Err(format!("server error ({})", res.status()));
+        // Keep the database's error code (such as SF051), so callers can
+        // tell one refusal from another.
+        let status = res.status();
+        let code = res.json::<Value>().await.ok()
+            .and_then(|v| v.get("code").and_then(Value::as_str).map(str::to_string))
+            .unwrap_or_default();
+        return Err(format!("server error ({status}) {code}").trim_end().to_string());
     }
     // A function that returns nothing answers with an empty body.
     let text = res.text().await.map_err(|e| e.to_string())?;

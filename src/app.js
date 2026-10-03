@@ -113,6 +113,20 @@ const FA = {
   Level: "سطح",
   Games: "بازی‌ها",
   "Hours played": "ساعت بازی",
+  Achievements: "دستاوردها",
+  "Achievement unlocked": "دستاورد باز شد",
+  "Hidden achievement": "دستاورد مخفی",
+  "Keep playing to find it.": "بازی کنید تا پیدایش کنید.",
+  "Unlocked {when}": "باز شده {when}",
+  "{p}% of players": "{p} درصد بازیکنان",
+  "{a} of {b}": "{a} از {b}",
+  "{a} of {b} achievements": "{a} از {b} دستاورد",
+  "Cloud save": "ذخیره‌ی ابری",
+  "Saved {when}": "ذخیره {when}",
+  "Nothing yet": "هنوز چیزی نیست",
+  "Your save is in the cloud.": "ذخیره‌ی بازی‌تان در فضای ابری است.",
+  "Couldn't sync your save. It's safe on this computer.": "همگام‌سازی ذخیره انجام نشد. روی همین کامپیوتر محفوظ است.",
+  "Brought in your save from the cloud.": "ذخیره‌ی بازی از فضای ابری آمد.",
   "Recent activity": "فعالیت اخیر",
   "{h} hrs on record": "{h} ساعت بازی",
   "Last played {when}": "آخرین اجرا {when}",
@@ -617,7 +631,8 @@ const detailView = (id) => {
     h("h1.detail__title", { translate: "no" }, g.title),
     h("div.detail__meta", ...metaChips(g)),
     shots,
-    syn ? h("div.reveal", h("h3", { style: "color:var(--text);margin:0 0 8px" }, t("About this game")), h("p.prose", syn)) : null
+    syn ? h("div.reveal", h("h3", { style: "color:var(--text);margin:0 0 8px" }, t("About this game")), h("p.prose", syn)) : null,
+    achievementsBox(g)
   );
 
   const side = detailSide(g);
@@ -688,6 +703,7 @@ const detailSide = (g) => {
     note.textContent = phaseText(s);
   });
 
+  if (g.owned) extra.append(cloudRow(g));
   if (g.owned && g.code) {
     const deviceCount = h("span", `${digits(g.devices || 0)} / ${digits(g.max_devices)}`);
     const manage = h("button.mini", LANG === "fa" ? "مدیریت دستگاه‌ها" : "Manage devices");
@@ -737,6 +753,77 @@ const detailSide = (g) => {
     ...rows.map(([k, v]) => h("div.side-card__row", h("span", t(k)), h("span", { translate: k === "Rating" || k === "Platforms" || k === "Genres" ? "no" : null }, v))),
     extra
   );
+};
+
+// ---------- Achievements ----------
+// A game's achievements (from game_achievements): unlocked ones lit, the
+// rest dim; hidden ones stay "Hidden" until unlocked. Shown only when the
+// game has any.
+const achText = (a, field) => (LANG === "fa" && a[`${field}_fa`]) || a[field] || "";
+const trophy = '<path d="M7 3h10v2h3v3a5 5 0 0 1-4.6 5A5 5 0 0 1 13 15.9V18h3v3H8v-3h3v-2.1A5 5 0 0 1 8.6 13 5 5 0 0 1 4 8V5h3Zm-1 4v1a3 3 0 0 0 1.4 2.5A7.6 7.6 0 0 1 7 8V7Zm12 0h-1v1c0 .9-.1 1.7-.4 2.5A3 3 0 0 0 18 8Z" fill="currentColor"/>';
+const achievementsBox = (g) => {
+  const box = h("section.ach", { hidden: true });
+  const id = g.work_id || g.id;
+  const fill = async () => {
+    let list;
+    try {
+      list = (await invoke("social_call", { action: "game_achievements", args: { p_work: id } })) || [];
+    } catch (e) {
+      return;
+    }
+    if (!list.length) return;
+    const got = list.filter((a) => a.unlocked_at).length;
+    const pct = Math.round((got / list.length) * 100);
+    const bar = h("span");
+    bar.style.width = `${pct}%`;
+    box.replaceChildren(
+      h(
+        "div.ach__head",
+        h("h3", t("Achievements")),
+        h("span.ach__count", tf("{a} of {b}", { a: digits(got), b: digits(list.length) }))
+      ),
+      h("div.ach__bar", bar),
+      h(
+        "div.ach__grid",
+        list.map((a) => {
+          const open = Boolean(a.unlocked_at);
+          const title = a.title ? achText(a, "title") : t("Hidden achievement");
+          const desc = a.title ? achText(a, "description") : t("Keep playing to find it.");
+          return h(
+            `div.ach__item${open ? ".is-open" : ""}`,
+            h("span.ach__icon", svg(trophy)),
+            h(
+              "span.ach__text",
+              h("strong", { dir: "auto" }, title),
+              desc ? h("span", { dir: "auto" }, desc) : null,
+              h(
+                "small",
+                (open ? tf("Unlocked {when}", { when: ago(a.unlocked_at) }) + " · " : "") + tf("{p}% of players", { p: digits(a.percent ?? 0) })
+              )
+            )
+          );
+        })
+      )
+    );
+    box.hidden = false;
+  };
+  box.refresh = fill;
+  fill();
+  return box;
+};
+
+// The cloud save line on a game's card.
+const cloudRow = (g) => {
+  const value = h("span", "…");
+  const row = h("div.side-card__row.cloudrow", h("span", t("Cloud save")), value);
+  invoke("cloud_status", { workId: g.work_id || g.id })
+    .then((s) => {
+      const c = s && s.cloud;
+      value.textContent = c && c.updated_at ? tf("Saved {when}", { when: ago(c.updated_at) }) : t("Nothing yet");
+      if (c && c.device_name) value.title = c.device_name;
+    })
+    .catch(() => (value.textContent = t("Offline")));
+  return row;
 };
 
 const copyMini = (code) => {
@@ -904,6 +991,17 @@ const goOnline = () => {
   listen("game-exited", () => {
     STATE.playing = null;
     setTimeout(loadPlaytime, 1500);
+  });
+  listen("achievement-unlocked", (e) => {
+    const a = (e.payload && e.payload.achievement) || {};
+    toast(`${t("Achievement unlocked")}: ${achText(a, "title")}`, "ok");
+    viewEl?.querySelector(".ach")?.refresh?.();
+  });
+  listen("cloud-sync", (e) => {
+    const p = e.payload || {};
+    if (p.phase === "pushed" && p.result === "uploaded") toast(t("Your save is in the cloud."), "ok");
+    if ((p.phase === "pushed" || p.phase === "pulled") && p.error) toast(t("Couldn't sync your save. It's safe on this computer."), "err");
+    if (p.phase === "pulled" && p.result === "downloaded") toast(t("Brought in your save from the cloud."), "ok");
   });
 };
 
@@ -1224,6 +1322,7 @@ const profileCard = (p) => {
     [
       ["Games", digits(p.games.length)],
       ["Hours played", hours(p.minutes_played)],
+      ["Achievements", digits(p.achievements || 0)],
       ["Friends", digits(p.friends)],
     ].map(([k, v]) => h("div.prof__stat", h("strong", v), h("span", t(k))))
   );
@@ -1237,7 +1336,12 @@ const profileCard = (p) => {
         h(
           "div.pgame__text",
           h("span.pgame__name", { translate: "no" }, g.title),
-          h("span.pgame__meta", tf("{h} hrs on record", { h: hours(g.minutes) }), g.last_played ? ` · ${tf("Last played {when}", { when: ago(g.last_played) })}` : "")
+          h(
+            "span.pgame__meta",
+            tf("{h} hrs on record", { h: hours(g.minutes) }),
+            g.last_played ? ` · ${tf("Last played {when}", { when: ago(g.last_played) })}` : "",
+            g.achievements_total ? ` · ${tf("{a} of {b} achievements", { a: digits(g.achievements), b: digits(g.achievements_total) })}` : ""
+          )
         )
       )
     )

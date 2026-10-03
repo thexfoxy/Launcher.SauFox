@@ -25,6 +25,7 @@ const ALLOWED: &[&str] = &[
     "block_user",
     "unblock_user",
     "my_blocks",
+    "game_achievements",
 ];
 
 pub fn playing() -> Option<String> {
@@ -51,12 +52,13 @@ pub async fn heartbeat() -> Result<(), String> {
 
 /// Count a started game as being played until its process ends, then tell
 /// the window (and the server) it has stopped.
-pub fn watch_game(app: AppHandle, work_id: String, mut child: Child) {
+pub fn watch_game(app: AppHandle, work_id: String, mut child: Child, on_exit: impl FnOnce() + Send + 'static) {
     set_playing(Some(work_id.clone()));
     tauri::async_runtime::spawn(async { let _ = heartbeat().await; });
     let _ = app.emit("game-started", &work_id);
     std::thread::spawn(move || {
         let _ = child.wait();
+        on_exit();
         if playing().as_deref() == Some(work_id.as_str()) {
             set_playing(None);
         }

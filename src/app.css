@@ -1345,7 +1345,7 @@ a {
 }
 .prof__stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-top: 12px;
 }
@@ -1726,4 +1726,98 @@ a {
 }
 .button--danger.is-asking {
   border-color: #ff6b5e;
+}
+
+/* Achievements on a game's page */
+.ach {
+  margin-top: 26px;
+}
+.ach__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ach__head h3 {
+  margin: 0;
+  color: var(--text);
+}
+.ach__count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.ach__bar {
+  height: 6px;
+  margin: 10px 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.ach__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #ffb35e);
+  box-shadow: 0 0 12px rgba(255, 122, 26, 0.6);
+}
+[dir="rtl"] .ach__bar span {
+  background: linear-gradient(270deg, var(--accent), #ffb35e);
+}
+.ach__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.ach__item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--glass-2);
+  opacity: 0.55;
+  filter: grayscale(1);
+  transition: opacity 0.2s, border-color 0.2s;
+}
+.ach__item.is-open {
+  opacity: 1;
+  filter: none;
+  border-color: rgba(255, 122, 26, 0.35);
+}
+.ach__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: #ffb35e;
+  background: linear-gradient(145deg, #232027, #111014);
+  box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.5), -2px -2px 8px rgba(255, 255, 255, 0.04);
+}
+.ach__item.is-open .ach__icon {
+  box-shadow: 0 0 0 2px rgba(255, 122, 26, 0.8), 0 0 16px rgba(255, 122, 26, 0.45);
+}
+.ach__icon svg {
+  width: 22px;
+  height: 22px;
+}
+.ach__text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.ach__text strong {
+  font-size: 13.5px;
+  color: var(--text);
+}
+.ach__text span {
+  font-size: 12px;
+  color: var(--soft);
+}
+.ach__text small {
+  font-size: 11px;
+  color: var(--muted);
 }

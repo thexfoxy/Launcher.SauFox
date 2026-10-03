@@ -4,17 +4,20 @@
 // OS keychain, never in the window.
 mod api;
 mod auth;
+mod cloud;
 mod config;
 mod device;
 mod install;
 mod launch;
 mod paths;
+mod popup;
+mod sdk;
 mod session;
 mod social;
 mod updater;
 
 use serde_json::{json, Value};
-use tauri::Window;
+use tauri::{Emitter, Window};
 
 #[tauri::command]
 fn me() -> Option<Value> {
@@ -142,9 +145,42 @@ async fn install_game(
 async fn play(app: tauri::AppHandle, work_id: String, license_id: String) -> Result<(), String> {
     let _guard = install::MUTATION.lock().await;
     let hash = api::authorize_game(&work_id, &license_id).await?;
-    let child = launch::launch(&work_id, &license_id, &hash)?;
-    social::watch_game(app, work_id, child);
+    // Bring in the cloud save first, when it's newer. If the cloud can't be
+    // reached the game still starts, with the save on this computer.
+    let _ = app.emit("cloud-sync", json!({ "work_id": work_id, "phase": "pull" }));
+    let pulled = cloud::pull(&work_id).await;
+    let _ = app.emit("cloud-sync", json!({ "work_id": work_id, "phase": "pulled", "result": pulled.as_ref().ok(), "error": pulled.as_ref().err() }));
+    let sdk = sdk::start(app.clone(), work_id.clone())?;
+    let extra = [
+        ("SAUFOX_SDK_URL", sdk.url.clone()),
+        ("SAUFOX_SDK_TOKEN", sdk.token.clone()),
+        ("SAUFOX_SAVE_DIR", paths::save_dir(&work_id).to_string_lossy().into_owned()),
+        ("SAUFOX_WORK_ID", work_id.clone()),
+    ];
+    let child = match launch::launch(&work_id, &license_id, &hash, &extra) {
+        Ok(c) => c,
+        Err(e) => {
+            sdk.stop();
+            return Err(e);
+        }
+    };
+    // When the game closes: stop the SDK and upload the save if it changed.
+    let exit_app = app.clone();
+    let exit_work = work_id.clone();
+    social::watch_game(app, work_id, child, move || {
+        sdk.stop();
+        tauri::async_runtime::spawn(async move {
+            let _ = exit_app.emit("cloud-sync", json!({ "work_id": exit_work, "phase": "push" }));
+            let pushed = cloud::push(&exit_work).await;
+            let _ = exit_app.emit("cloud-sync", json!({ "work_id": exit_work, "phase": "pushed", "result": pushed.as_ref().ok(), "error": pushed.as_ref().err() }));
+        });
+    });
     Ok(())
+}
+
+#[tauri::command]
+async fn cloud_status(work_id: String) -> Result<Value, String> {
+    cloud::status(&work_id).await
 }
 
 // ---------- Online: presence, friends, profiles ----------
@@ -248,7 +284,8 @@ pub fn run() {
             playing,
             social_call,
             my_profile,
-            save_profile
+            save_profile,
+            cloud_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running the launcher");

@@ -20,7 +20,7 @@ pub fn downloads_dir() -> PathBuf {
 }
 
 // Keep a work id to safe folder characters.
-fn safe(name: &str) -> String {
+pub fn safe(name: &str) -> String {
     let s: String = name
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
@@ -31,4 +31,14 @@ fn safe(name: &str) -> String {
     } else {
         s
     }
+}
+
+/// Where a game keeps its saves (the game is told this folder when it
+/// starts); synced with the cloud by the launcher.
+pub fn saves_dir() -> PathBuf {
+    root().join("Saves")
+}
+
+pub fn save_dir(work_id: &str) -> PathBuf {
+    saves_dir().join(safe(work_id))
 }
