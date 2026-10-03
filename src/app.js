@@ -71,6 +71,57 @@ const FA = {
   "Need help?": "کمک می‌خواهید؟",
   "This PC": "این کامپیوتر",
   devices: "دستگاه",
+  Friends: "دوستان",
+  Profile: "پروفایل",
+  "Add a friend": "افزودن دوست",
+  "Their username": "نام کاربری دوست",
+  "Send request": "ارسال درخواست",
+  "Friend requests": "درخواست‌های دوستی",
+  "Online": "آنلاین",
+  "Offline": "آفلاین",
+  "Sent requests": "درخواست‌های ارسال‌شده",
+  Accept: "پذیرفتن",
+  Decline: "رد کردن",
+  Cancel: "لغو",
+  Remove: "حذف",
+  "Tap again to remove": "برای حذف دوباره بزنید",
+  "Playing {game}": "در حال بازی {game}",
+  "Last online {when}": "آخرین بازدید {when}",
+  "No friends yet": "هنوز دوستی ندارید",
+  "Add friends by their username to see when they're online and what they play.": "دوستانتان را با نام کاربری اضافه کنید تا ببینید کی آنلاین هستند و چه بازی می‌کنند.",
+  "Request sent.": "درخواست ارسال شد.",
+  "You're now friends.": "حالا با هم دوست هستید.",
+  "No one has that username.": "کسی با این نام کاربری پیدا نشد.",
+  "That's you.": "این خودتان هستید.",
+  "You're already friends.": "از قبل دوست هستید.",
+  "Already sent; waiting for them.": "قبلاً فرستاده‌اید؛ منتظر پاسخ است.",
+  "Choose your username": "نام کاربری خود را انتخاب کنید",
+  "It's how friends find you and the name others see. Your real name and email stay private.": "دوستان شما را با این نام پیدا می‌کنند و دیگران همین را می‌بینند. نام واقعی و ایمیلتان خصوصی می‌ماند.",
+  Username: "نام کاربری",
+  "3–20 letters, numbers or _": "۳ تا ۲۰ حرف انگلیسی، عدد یا _",
+  "About you": "درباره‌ی شما",
+  "Who can see your profile": "چه کسانی پروفایل شما را ببینند",
+  Everyone: "همه",
+  "Friends only": "فقط دوستان",
+  "Only me": "فقط خودم",
+  Save: "ذخیره",
+  "Saved.": "ذخیره شد.",
+  "That username is taken.": "این نام کاربری گرفته شده است.",
+  "Use 3–20 letters, numbers or _.": "از ۳ تا ۲۰ حرف انگلیسی، عدد یا _ استفاده کنید.",
+  "Edit profile": "ویرایش پروفایل",
+  "View on the website": "مشاهده در وب‌سایت",
+  Level: "سطح",
+  Games: "بازی‌ها",
+  "Hours played": "ساعت بازی",
+  "Recent activity": "فعالیت اخیر",
+  "{h} hrs on record": "{h} ساعت بازی",
+  "Last played {when}": "آخرین اجرا {when}",
+  "This profile is private.": "این پروفایل خصوصی است.",
+  "Add friend": "افزودن دوست",
+  "Request sent": "درخواست ارسال شد",
+  "Friends ✓": "دوست ✓",
+  "Playtime": "زمان بازی",
+  "Member since {when}": "عضو از {when}",
 };
 let LANG = "en";
 try {
@@ -82,6 +133,19 @@ const applyLang = () => {
   document.documentElement.dir = LANG === "fa" ? "rtl" : "ltr";
 };
 const digits = (n) => (LANG === "fa" ? String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[+d]) : String(n));
+// "Playing {game}" and the like: translate, then fill in the parts.
+const tf = (s, parts) => t(s).replace(/\{(\w+)\}/g, (_, k) => parts[k] ?? "");
+const hours = (minutes) => digits((Math.round(((minutes || 0) / 60) * 10) / 10).toString());
+const ago = (iso) => {
+  if (!iso) return "";
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000));
+  const fa = LANG === "fa";
+  if (mins < 60) return fa ? `${digits(mins || 1)} دقیقه پیش` : `${mins || 1} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return fa ? `${digits(hrs)} ساعت پیش` : `${hrs} h ago`;
+  const days = Math.round(hrs / 24);
+  return fa ? `${digits(days)} روز پیش` : `${days} d ago`;
+};
 
 // ---------- Tiny DOM builder ----------
 const h = (tag, attrs, ...kids) => {
@@ -215,7 +279,7 @@ const phaseText = (s) =>
   s.phase === "download" ? `${t("Downloading…")} ${digits(s.pct)}%` : s.phase === "verify" ? t("Checking…") : s.phase === "install" ? t("Unpacking…") : "";
 
 // ---------- State ----------
-const STATE = { me: null, catalog: [], deviceName: "", view: "store", detail: null };
+const STATE = { me: null, catalog: [], deviceName: "", view: "store", detail: null, friends: [], playtime: {}, profile: null, playing: null };
 const gameById = (id) => STATE.catalog.find((g) => g.id === id);
 const owned = () => STATE.catalog.filter((g) => g.owned);
 
@@ -300,6 +364,8 @@ const TABS = [
   { id: "store", label: "Store", icon: '<path d="M4 9h16l-1 11H5L4 9z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 9V7a4 4 0 0 1 8 0v2" fill="none" stroke="currentColor" stroke-width="1.7"/>' },
   { id: "library", label: "Library", icon: '<rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/><rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/>' },
   { id: "downloads", label: "Downloads", icon: '<path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' },
+  { id: "friends", label: "Friends", icon: '<circle cx="9" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3 20a6 6 0 0 1 12 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="17" cy="9" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M16 14.2a5 5 0 0 1 5.5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' },
+  { id: "profile", label: "Profile", icon: '<circle cx="12" cy="8.5" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' },
 ];
 
 let viewEl, pillEl, tabEls;
@@ -313,7 +379,8 @@ const buildShell = () => {
       "button.tab",
       { onclick: () => route(tab.id) },
       h("span", { html: `<svg viewBox="0 0 24 24">${tab.icon}</svg>` }).firstChild,
-      h("span", t(tab.label))
+      h("span", t(tab.label)),
+      tab.id === "friends" ? h("span.tab__badge", { hidden: true }) : null
     );
     tabEls[tab.id] = el;
     nav.append(el);
@@ -324,6 +391,7 @@ const buildShell = () => {
 
   viewEl = h("div.view");
   app.replaceChildren(h("div.shell", h("aside.rail", nav, h("div.rail__spacer"), acct), viewEl));
+  updateFriendBadge();
 };
 
 const openAccount = (e, anchor) => {
@@ -373,13 +441,27 @@ const movePill = (id) => {
 // ---------- Router ----------
 const route = (view, param) => {
   // Remember which list a detail page was opened from, for the Back button.
-  if (view === "detail" && ["store", "library", "downloads"].includes(STATE.view)) STATE.backTab = STATE.view;
+  if (view === "detail" && ["store", "library", "downloads", "profile"].includes(STATE.view)) STATE.backTab = STATE.view;
   STATE.view = view;
-  if (view !== "detail") movePill(view);
+  STATE.param = param;
+  if (view === "user") movePill("friends");
+  else if (view !== "detail") movePill(view);
   else movePill(STATE.backTab || "store");
   subs = {};
   const content =
-    view === "store" ? storeView() : view === "library" ? libraryView() : view === "downloads" ? downloadsView() : detailView(param);
+    view === "store"
+      ? storeView()
+      : view === "library"
+        ? libraryView()
+        : view === "downloads"
+          ? downloadsView()
+          : view === "friends"
+            ? friendsView()
+            : view === "profile"
+              ? profileView(null)
+              : view === "user"
+                ? profileView(param)
+                : detailView(param);
   const inner = h("div.view__in", content);
   viewEl.replaceChildren(inner);
   viewEl.scrollTop = 0;
@@ -387,7 +469,7 @@ const route = (view, param) => {
 };
 const render = () => {
   buildShell();
-  route(STATE.view === "detail" ? "store" : STATE.view);
+  route(STATE.view === "detail" || STATE.view === "user" ? "store" : STATE.view);
 };
 
 // ---------- Store ----------
@@ -527,6 +609,8 @@ const detailSide = (g) => {
   if ((g.platforms || []).length) rows.push(["Platforms", (g.platforms || []).join(", ")]);
   if ((g.genres || []).length) rows.push(["Genres", (g.genres || []).join(", ")]);
   if (g.review_count) rows.push(["Reviews", `${digits(g.review_count)} ${t("reviews")}`]);
+  const played = STATE.playtime[g.work_id || g.id];
+  if (g.owned && played) rows.push(["Playtime", tf("{h} hrs on record", { h: hours(played.minutes) })]);
 
   const setPlay = () => {
     action.textContent = t("Play");
@@ -535,6 +619,7 @@ const detailSide = (g) => {
       action.disabled = true;
       try {
         await invoke("play", { workId: g.work_id || g.id, licenseId: g.license_id });
+        STATE.playing = g.work_id || g.id;
       } catch (e) {
         toast(t("Something went wrong. Try again."), "err");
       }
@@ -768,6 +853,339 @@ const downloadsView = () => {
   return wrap;
 };
 
+// ---------- Online: presence, friends, profiles ----------
+// A heartbeat every minute keeps the account "online" (and says which game
+// is running); the friends list refreshes every 30 seconds. All of it is
+// read through the backend, which only lets through the social functions.
+let onlineTimers = [];
+let onlineListening = false;
+const goOnline = () => {
+  onlineTimers.forEach(clearInterval);
+  const beat = () => invoke("heartbeat").catch(() => {});
+  beat();
+  loadFriends();
+  loadPlaytime();
+  loadMyProfile();
+  onlineTimers = [setInterval(beat, 60000), setInterval(loadFriends, 30000)];
+  if (onlineListening) return;
+  onlineListening = true;
+  listen("game-started", (e) => {
+    STATE.playing = e.payload;
+  });
+  listen("game-exited", () => {
+    STATE.playing = null;
+    setTimeout(loadPlaytime, 1500);
+  });
+};
+
+const loadFriends = async () => {
+  try {
+    STATE.friends = (await invoke("social_call", { action: "my_friends" })) || [];
+  } catch (e) {
+    return;
+  }
+  updateFriendBadge();
+  // Redraw the friends page in place, unless the member is typing in it.
+  if (STATE.view === "friends" && !viewEl.contains(document.activeElement)) route("friends");
+};
+
+const loadPlaytime = async () => {
+  try {
+    const rows = (await invoke("social_call", { action: "my_playtime" })) || [];
+    STATE.playtime = Object.fromEntries(rows.map((r) => [r.work_id, r]));
+  } catch (e) {}
+};
+
+const loadMyProfile = async () => {
+  try {
+    STATE.profile = await invoke("my_profile");
+  } catch (e) {}
+};
+
+const updateFriendBadge = () => {
+  const badge = document.querySelector(".tab__badge");
+  if (!badge) return;
+  const waiting = STATE.friends.filter((f) => f.relation === "received").length;
+  badge.hidden = !waiting;
+  badge.textContent = digits(waiting);
+};
+
+const avatarEl = (person, size) => {
+  const box = h("span.ava", { style: `--s:${size || 40}px` });
+  if (person.avatar_url) box.append(h("img", { src: person.avatar_url, alt: "", onerror: (e) => e.target.remove() }));
+  else box.textContent = (person.handle || "?").charAt(0).toUpperCase();
+  if (person.online) box.classList.add(person.playing_title || person.playing ? "is-playing" : "is-online");
+  return box;
+};
+
+const statusText = (f) =>
+  f.playing_title ? tf("Playing {game}", { game: f.playing_title }) : f.online ? t("Online") : f.last_seen_at ? tf("Last online {when}", { when: ago(f.last_seen_at) }) : t("Offline");
+
+const friendsView = () => {
+  const wrap = h("div.wrap");
+  const input = h("input.is-text", { type: "text", placeholder: t("Their username"), maxlength: 20, spellcheck: "false" });
+  const send = h("button.button.button--primary", {}, t("Send request"));
+  const note = h("p.side-card__note");
+  const ask = async () => {
+    const handle = input.value.trim();
+    if (handle.length < 3) return;
+    send.disabled = true;
+    note.classList.remove("is-error");
+    try {
+      const r = await invoke("social_call", { action: "friend_request", args: { p_handle: handle } });
+      const msg = {
+        sent: "Request sent.",
+        accepted: "You're now friends.",
+        not_found: "No one has that username.",
+        self: "That's you.",
+        already: "You're already friends.",
+        pending: "Already sent; waiting for them.",
+      }[r];
+      note.textContent = t(msg || "Something went wrong. Try again.");
+      note.classList.toggle("is-error", !["sent", "accepted"].includes(r));
+      if (r === "sent" || r === "accepted") {
+        input.value = "";
+        await loadFriends();
+        route("friends");
+      }
+    } catch (e) {
+      note.textContent = t("Something went wrong. Try again.");
+      note.classList.add("is-error");
+    }
+    send.disabled = false;
+  };
+  send.addEventListener("click", ask);
+  input.addEventListener("keydown", (e) => e.key === "Enter" && ask());
+
+  wrap.append(
+    h(
+      "div.head",
+      h("div", h("h2", t("Friends")), h("p", t("Add friends by their username to see when they're online and what they play."))),
+      h("div", h("div.redeem", input, send), note)
+    )
+  );
+
+  const by = (rel) => STATE.friends.filter((f) => f.relation === rel);
+  const friends = by("friend");
+  const groups = [
+    ["Friend requests", by("received")],
+    ["Online", friends.filter((f) => f.online)],
+    ["Offline", friends.filter((f) => !f.online)],
+    ["Sent requests", by("sent")],
+  ];
+  if (!STATE.friends.length) {
+    wrap.append(
+      h(
+        "div.empty",
+        h("img", { src: "logo.webp", alt: "" }),
+        h("p", { style: "color:var(--text);font-weight:700" }, t("No friends yet")),
+        h("p", t("Add friends by their username to see when they're online and what they play."))
+      )
+    );
+    return wrap;
+  }
+  for (const [title, list] of groups) {
+    if (!list.length) continue;
+    wrap.append(h("h3.flist__title", `${t(title)} (${digits(list.length)})`), h("div.flist", list.map(friendRow)));
+  }
+  return wrap;
+};
+
+const friendRow = (f) => {
+  const actions = h("div.frow__actions");
+  const act = async (fn) => {
+    actions.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    try {
+      await fn();
+    } catch (e) {
+      toast(t("Something went wrong. Try again."), "err");
+    }
+    await loadFriends();
+    route("friends");
+  };
+  if (f.relation === "received") {
+    actions.append(
+      h("button.mini.mini--accent", { onclick: () => act(() => invoke("social_call", { action: "friend_respond", args: { p_user: f.user_id, p_accept: true } })) }, t("Accept")),
+      h("button.mini", { onclick: () => act(() => invoke("social_call", { action: "friend_respond", args: { p_user: f.user_id, p_accept: false } })) }, t("Decline"))
+    );
+  } else {
+    const remove = h("button.mini", f.relation === "sent" ? t("Cancel") : t("Remove"));
+    remove.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (f.relation === "friend" && !remove.classList.contains("is-asking")) {
+        remove.classList.add("is-asking");
+        remove.textContent = t("Tap again to remove");
+        setTimeout(() => {
+          remove.classList.remove("is-asking");
+          remove.textContent = t("Remove");
+        }, 3500);
+        return;
+      }
+      act(() => invoke("social_call", { action: "friend_remove", args: { p_user: f.user_id } }));
+    });
+    actions.append(remove);
+  }
+  const row = h(
+    "div.frow.reveal",
+    h(
+      "button.frow__who",
+      { onclick: () => f.handle && route("user", f.handle) },
+      avatarEl(f, 44),
+      h("span.frow__text", h("span.frow__name", { translate: "no" }, f.handle || "—"), h("span.frow__status", f.relation === "friend" ? statusText(f) : ""))
+    ),
+    actions
+  );
+  if (f.playing_title) row.classList.add("is-playing");
+  else if (f.online) row.classList.add("is-online");
+  return row;
+};
+
+// A profile: your own (handle null) or someone else's, by username.
+const profileView = (handle) => {
+  const wrap = h("div.wrap");
+  const mine = !handle;
+  if (mine && !(STATE.profile && STATE.profile.handle)) {
+    wrap.append(profileForm(true));
+    return wrap;
+  }
+  const target = handle || STATE.profile.handle;
+  const body = h("div", h("div.loading", h("span")));
+  wrap.append(body);
+  invoke("social_call", { action: "public_profile", args: { p_handle: target } })
+    .then((p) => body.replaceChildren(p ? profileCard(p) : h("div.empty", h("p", t("No one has that username.")))))
+    .then(() => watchReveals(viewEl))
+    .catch(() => body.replaceChildren(h("div.empty", h("p", t("Something went wrong. Try again.")))));
+  return wrap;
+};
+
+const profileCard = (p) => {
+  const status = p.playing ? tf("Playing {game}", { game: p.playing.title }) : p.online ? t("Online") : p.last_seen_at ? tf("Last online {when}", { when: ago(p.last_seen_at) }) : t("Offline");
+  const actions = h("div.prof__actions");
+  if (p.relation === "self") {
+    const edit = h("button.button.button--ghost", t("Edit profile"));
+    edit.addEventListener("click", () => {
+      const host = viewEl.querySelector(".view__in .wrap");
+      host.replaceChildren(profileForm(false));
+    });
+    actions.append(edit);
+  } else if (p.relation === "none") {
+    const add = h("button.button.button--primary", t("Add friend"));
+    add.addEventListener("click", async () => {
+      add.disabled = true;
+      try {
+        const r = await invoke("social_call", { action: "friend_request", args: { p_handle: p.handle } });
+        add.textContent = r === "accepted" ? t("Friends ✓") : t("Request sent");
+        loadFriends();
+      } catch (e) {
+        add.disabled = false;
+      }
+    });
+    actions.append(add);
+  } else {
+    actions.append(h("span.chip", p.relation === "friend" ? t("Friends ✓") : t("Request sent")));
+  }
+  actions.append(
+    h("button.button.button--ghost", { onclick: () => invoke("open_url", { url: `${SITE}/user?u=${encodeURIComponent(p.handle)}` }) }, t("View on the website"))
+  );
+
+  const head = h(
+    "div.prof__head.reveal",
+    avatarEl({ ...p, online: p.online && !p.hidden }, 96),
+    h(
+      "div.prof__who",
+      h("h2.prof__name", { translate: "no" }, p.handle),
+      p.hidden ? h("p.prof__status", t("This profile is private.")) : h(`p.prof__status${p.playing ? ".is-playing" : p.online ? ".is-online" : ""}`, status),
+      p.bio && !p.hidden ? h("p.prof__bio", { dir: "auto" }, p.bio) : null,
+      actions
+    ),
+    p.hidden ? null : h("div.prof__level", h("span", t("Level")), h("strong", digits(p.level)))
+  );
+  if (p.hidden) return head;
+
+  const stats = h(
+    "div.prof__stats.reveal",
+    [
+      ["Games", digits(p.games.length)],
+      ["Hours played", hours(p.minutes_played)],
+      ["Friends", digits(p.friends)],
+    ].map(([k, v]) => h("div.prof__stat", h("strong", v), h("span", t(k))))
+  );
+  const games = h(
+    "div.flist",
+    p.games.map((g) =>
+      h(
+        "div.pgame.reveal",
+        { onclick: () => gameById(g.work_id) && route("detail", g.work_id) },
+        h("img", { src: art(g.cover_url), alt: "", onerror: (e) => (e.target.src = "logo.webp") }),
+        h(
+          "div.pgame__text",
+          h("span.pgame__name", { translate: "no" }, g.title),
+          h("span.pgame__meta", tf("{h} hrs on record", { h: hours(g.minutes) }), g.last_played ? ` · ${tf("Last played {when}", { when: ago(g.last_played) })}` : "")
+        )
+      )
+    )
+  );
+  return h(
+    "div",
+    head,
+    stats,
+    h("p.prof__since", tf("Member since {when}", { when: new Date(p.member_since).toLocaleDateString(LANG === "fa" ? "fa-IR" : "en-GB", { year: "numeric", month: "long" }) })),
+    p.games.length ? h("h3.flist__title", t("Recent activity")) : null,
+    games
+  );
+};
+
+// Choose a username (first time) or edit the profile.
+const profileForm = (first) => {
+  const current = STATE.profile || {};
+  const handle = h("input", { type: "text", value: current.handle || "", maxlength: 20, spellcheck: "false", placeholder: t("3–20 letters, numbers or _") });
+  const bio = h("textarea", { maxlength: 300, rows: 3 });
+  bio.value = current.bio || "";
+  const vis = h(
+    "div.seg",
+    [
+      ["public", "Everyone"],
+      ["friends", "Friends only"],
+      ["private", "Only me"],
+    ].map(([v, label]) =>
+      h("label.seg__opt", h("input", { type: "radio", name: "vis", value: v, checked: (current.visibility || "public") === v }), h("span", t(label)))
+    )
+  );
+  const note = h("p.side-card__note");
+  const save = h("button.button.button--primary", t("Save"));
+  save.addEventListener("click", async () => {
+    const value = handle.value.trim();
+    note.classList.add("is-error");
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(value)) {
+      note.textContent = t("Use 3–20 letters, numbers or _.");
+      return handle.focus();
+    }
+    save.disabled = true;
+    note.textContent = "";
+    try {
+      await invoke("save_profile", { handle: value, bio: bio.value, visibility: vis.querySelector("input:checked").value });
+      await loadMyProfile();
+      toast(t("Saved."), "ok");
+      route("profile");
+    } catch (e) {
+      const c = String(e);
+      note.textContent = c === "handle-taken" ? t("That username is taken.") : c === "handle-invalid" ? t("Use 3–20 letters, numbers or _.") : t("Something went wrong. Try again.");
+      save.disabled = false;
+    }
+  });
+  const field = (label, el) => h("label.field", h("span", t(label)), el);
+  return h(
+    "div.pform.reveal",
+    h("h2", first ? t("Choose your username") : t("Edit profile")),
+    h("p.pform__lead", t("It's how friends find you and the name others see. Your real name and email stay private.")),
+    field("Username", handle),
+    field("About you", bio),
+    h("div.field", h("span", t("Who can see your profile")), vis),
+    note,
+    h("div.prof__actions", save, first ? null : h("button.button.button--ghost", { onclick: () => route("profile") }, t("Cancel")))
+  );
+};
+
 // ---------- Boot ----------
 const boot = async () => {
   applyLang();
@@ -787,6 +1205,7 @@ const boot = async () => {
   await refresh();
   STATE.view = "store";
   render();
+  goOnline();
 };
 
 wireWindow();

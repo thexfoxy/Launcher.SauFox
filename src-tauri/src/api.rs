@@ -135,7 +135,62 @@ async fn rpc(name: &str, body: Value) -> Result<Value, String> {
     if !res.status().is_success() {
         return Err(format!("server error ({})", res.status()));
     }
-    res.json().await.map_err(|e| e.to_string())
+    // A function that returns nothing answers with an empty body.
+    let text = res.text().await.map_err(|e| e.to_string())?;
+    if text.trim().is_empty() {
+        return Ok(Value::Null);
+    }
+    serde_json::from_str(&text).map_err(|e| e.to_string())
+}
+
+/// A database function by name, for the social module (which keeps its own
+/// list of the functions the window may call).
+pub async fn call(name: &str, body: Value) -> Result<Value, String> {
+    rpc(name, body).await
+}
+
+/// The account's own public-profile fields.
+pub async fn my_profile() -> Result<Value, String> {
+    let session = fresh_token().await?;
+    let res = client()
+        .get(format!("{SUPABASE_URL}/rest/v1/profiles"))
+        .query(&[("select", "handle,bio,visibility,avatar_url"), ("id", &format!("eq.{}", session.user_id))])
+        .header("apikey", SUPABASE_ANON_KEY)
+        .bearer_auth(session.access_token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("server error ({})", res.status()));
+    }
+    let rows: Value = res.json().await.map_err(|e| e.to_string())?;
+    Ok(rows.get(0).cloned().unwrap_or(Value::Null))
+}
+
+/// Save the username, bio and who may see the profile. The database checks
+/// the username's form and that nobody else has it.
+pub async fn save_profile(handle: &str, bio: &str, visibility: &str) -> Result<Value, String> {
+    let session = fresh_token().await?;
+    let res = client()
+        .patch(format!("{SUPABASE_URL}/rest/v1/profiles"))
+        .query(&[("id", format!("eq.{}", session.user_id))])
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Prefer", "return=representation")
+        .bearer_auth(session.access_token)
+        .json(&json!({
+            "handle": handle.trim(),
+            "bio": if bio.trim().is_empty() { Value::Null } else { json!(bio.trim()) },
+            "visibility": visibility,
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    match res.status().as_u16() {
+        200..=299 => Ok(res.json::<Value>().await.ok().and_then(|v| v.get(0).cloned()).unwrap_or(Value::Null)),
+        409 => Err("handle-taken".into()),
+        400 => Err("handle-invalid".into()),
+        code => Err(format!("server error ({code})")),
+    }
 }
 
 /// The account's games (bought or redeemed), each with its key.

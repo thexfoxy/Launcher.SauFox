@@ -10,6 +10,7 @@ mod install;
 mod launch;
 mod paths;
 mod session;
+mod social;
 
 use serde_json::{json, Value};
 use tauri::Window;
@@ -137,10 +138,41 @@ async fn install_game(
 }
 
 #[tauri::command]
-async fn play(work_id: String, license_id: String) -> Result<(), String> {
+async fn play(app: tauri::AppHandle, work_id: String, license_id: String) -> Result<(), String> {
     let _guard = install::MUTATION.lock().await;
     let hash = api::authorize_game(&work_id, &license_id).await?;
-    launch::launch(&work_id, &license_id, &hash)
+    let child = launch::launch(&work_id, &license_id, &hash)?;
+    social::watch_game(app, work_id, child);
+    Ok(())
+}
+
+// ---------- Online: presence, friends, profiles ----------
+#[tauri::command]
+async fn heartbeat() -> Result<(), String> {
+    social::heartbeat().await
+}
+
+#[tauri::command]
+fn playing() -> Option<String> {
+    social::playing()
+}
+
+#[tauri::command]
+async fn social_call(action: String, args: Option<Value>) -> Result<Value, String> {
+    social::call(&action, args.unwrap_or_else(|| json!({}))).await
+}
+
+#[tauri::command]
+async fn my_profile() -> Result<Value, String> {
+    api::my_profile().await
+}
+
+#[tauri::command]
+async fn save_profile(handle: String, bio: String, visibility: String) -> Result<Value, String> {
+    if !["public", "friends", "private"].contains(&visibility.as_str()) {
+        return Err("bad visibility".into());
+    }
+    api::save_profile(&handle, &bio, &visibility).await
 }
 
 #[tauri::command]
@@ -204,7 +236,12 @@ pub fn run() {
             device_info,
             devices,
             release_device,
-            open_url
+            open_url,
+            heartbeat,
+            playing,
+            social_call,
+            my_profile,
+            save_profile
         ])
         .run(tauri::generate_context!())
         .expect("error while running the launcher");

@@ -7,8 +7,9 @@ use crate::install;
 use crate::paths;
 
 /// Launch the game for `work_id`, passing the license id and device id so the
-/// game can validate itself. Returns once the game has started.
-pub fn launch(work_id: &str, license_id: &str, device_hash: &str) -> Result<(), String> {
+/// game can validate itself. Returns the running game's process, so the
+/// launcher can count playtime until it ends.
+pub fn launch(work_id: &str, license_id: &str, device_hash: &str) -> Result<std::process::Child, String> {
     let record = install::installed(work_id).ok_or("not installed")?;
     let dir = paths::game_dir(work_id);
     let relative = record.exe.as_deref().ok_or("Reinstall this game to record its executable")?;
@@ -20,6 +21,5 @@ pub fn launch(work_id: &str, license_id: &str, device_hash: &str) -> Result<(), 
     }
     cmd.env("SAUFOX_LICENSE", license_id)
         .env("SAUFOX_DEVICE", device_hash);
-    cmd.spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    cmd.spawn().map_err(|e| e.to_string())
 }
