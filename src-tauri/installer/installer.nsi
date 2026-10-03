@@ -84,7 +84,7 @@ Var WixMode
 Var OldMainBinaryName
 
 Name "${PRODUCTNAME}"
-BrandingText "${COPYRIGHT}"
+BrandingText "SauFox Entertainment"
 OutFile "${OUTFILE}"
 
 ; We don't actually use this value as default install path,
@@ -151,14 +151,21 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 Function ${UN}SauFoxPaint
   Exch $R9
   Push $R8
+  Push $R7
   SetCtlColors $R9 "${SF_TEXT}" "${SF_BG}"
   StrCpy $R8 0
   SauFoxPaintLoop:
     FindWindow $R8 "" "" $R9 $R8
     StrCmp $R8 0 SauFoxPaintDone
     SetCtlColors $R8 "${SF_TEXT}" "${SF_BG}"
+    ; Themed radio buttons and checkboxes ignore the text colour (black on
+    ; dark): drop their theme so the colours apply.
+    System::Call 'user32::GetClassNameW(p R8, w .R7, i 64)'
+    StrCmp $R7 "Button" 0 SauFoxPaintLoop
+    System::Call 'uxtheme::SetWindowTheme(p R8, w " ", w " ")'
     Goto SauFoxPaintLoop
   SauFoxPaintDone:
+  Pop $R7
   Pop $R8
   Pop $R9
 FunctionEnd
