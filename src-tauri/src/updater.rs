@@ -40,10 +40,13 @@ async fn run(app: AppHandle, update: Update) {
     let info = json!({ "version": update.version, "current": update.current_version });
     let window = WebviewWindowBuilder::new(&app, "update", WebviewUrl::App("update.html".into()))
         .title("SauFox")
-        .inner_size(540.0, 280.0)
+        .inner_size(504.0, 244.0)
         .resizable(false)
         .maximizable(false)
         .decorations(false)
+        // Only the rounded glass card shows: no square window behind it.
+        .transparent(true)
+        .shadow(false)
         .center()
         .initialization_script(&format!("window.__SAUFOX_UPDATE__ = {info};"))
         .build();
