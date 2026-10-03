@@ -1,6 +1,7 @@
 #include "SauFoxSDK.h"
 
 #include "GenericPlatform/GenericPlatformMisc.h"
+#include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
