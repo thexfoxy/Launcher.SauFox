@@ -1,8 +1,25 @@
 # SauFox launcher SDK
 
 What a game gets when the SauFox launcher starts it, and how to use it for
-**achievements** and **cloud saves**. Ready-made code: [`unity/SauFox.cs`](unity/SauFox.cs)
-and [`godot/saufox.gd`](godot/saufox.gd). Any other engine only needs an HTTP request.
+**achievements** and **cloud saves**. Ready-made code: [`unreal/`](unreal/) (Unreal Engine 5, C++ and Blueprints),
+[`unity/SauFox.cs`](unity/SauFox.cs) and [`godot/saufox.gd`](godot/saufox.gd).
+Any other engine only needs an HTTP request.
+
+## Unreal Engine (quick start)
+
+1. Copy `unreal/SauFoxSDK.h` and `unreal/SauFoxSDK.cpp` into your game module's
+   `Source/<Game>/` folder and replace `MYGAME_API` with your module's macro
+   (e.g. `CANDLEWOOD_API`).
+2. In `<Game>.Build.cs`, add `"HTTP", "Json", "JsonUtilities"` to
+   `PublicDependencyModuleNames`. Regenerate project files and build.
+3. In Blueprints, the **SauFox** category has: *Unlock Achievement*,
+   *Save Game to SauFox* / *Load Game from SauFox* / *Does SauFox Save Exist*
+   (use them instead of *Save Game to Slot* / *Load Game from Slot*),
+   *Get Save Dir* and *Is Available*.
+
+Use *Save Game to SauFox* for everything you want in the cloud: Unreal's own
+*Save Game to Slot* writes to `Saved/SaveGames` next to the game, which the
+launcher doesn't sync. Keep config (`GameUserSettings.ini`) where Unreal puts it.
 
 ## Environment variables
 
