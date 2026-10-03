@@ -219,7 +219,27 @@ pub async fn catalog() -> Result<Value, String> {
     if !res.status().is_success() {
         return Err(format!("server error ({})", res.status()));
     }
-    res.json().await.map_err(|e| e.to_string())
+    let mut works: Value = res.json().await.map_err(|e| e.to_string())?;
+    // The dollar rate set in the admin panel, so a game priced only in
+    // Rials shows the same "≈ $" price as on the website.
+    let rate = client()
+        .get(format!("{SUPABASE_URL}/rest/v1/site_settings"))
+        .query(&[("select", "usd_irr"), ("id", "eq.1")])
+        .header("apikey", SUPABASE_ANON_KEY)
+        .send()
+        .await
+        .ok();
+    let usd_irr = match rate {
+        Some(r) if r.status().is_success() => r.json::<Value>().await.ok().and_then(|v| v.get(0).and_then(|row| row.get("usd_irr")).cloned()),
+        _ => None,
+    }
+    .unwrap_or(Value::Null);
+    if let Some(rows) = works.as_array_mut() {
+        for row in rows {
+            row["usd_irr"] = usd_irr.clone();
+        }
+    }
+    Ok(works)
 }
 
 /// Redeem a game key into the account's library.

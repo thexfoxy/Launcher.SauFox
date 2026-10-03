@@ -197,9 +197,17 @@ const fmtSize = (bytes) => {
   if (gb >= 1) return `${digits(gb.toFixed(1))} GB`;
   return `${digits(Math.round(bytes / 1e6))} MB`;
 };
+// Prices as on the website: Rials in Persian; in English the game's dollar
+// price, else its Rial price at the admin panel's rate ("≈"), else Rials.
+// Free only when no price was set at all.
 const money = (g) => {
-  if (LANG === "fa") return g.price_irr == null ? t("Free") : `${Number(g.price_irr).toLocaleString("fa-IR")} ریال`;
-  return g.price_usd == null ? t("Free") : `$${Number(g.price_usd).toFixed(2)}`;
+  const irr = g.price_irr == null ? null : Number(g.price_irr);
+  const usd = g.price_usd == null ? null : Number(g.price_usd);
+  if (irr == null && usd == null) return t("Free");
+  if (LANG === "fa") return irr != null ? `${irr.toLocaleString("fa-IR")} ریال` : `${usd.toLocaleString("fa-IR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} دلار`;
+  if (usd != null) return `$${usd.toFixed(2)}`;
+  if (g.usd_irr) return `≈ $${(irr / Number(g.usd_irr)).toFixed(2)}`;
+  return `${irr.toLocaleString("en-US")} Rials`;
 };
 const art = (path) => (path ? (/^https?:/.test(path) ? path : `${SITE}/${path}`) : "logo.webp");
 const synopsisOf = (g) => (LANG === "fa" ? g.synopsis_fa || g.synopsis : g.synopsis || g.synopsis_fa) || "";
