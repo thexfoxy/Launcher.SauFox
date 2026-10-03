@@ -435,7 +435,12 @@ const openAccount = (e, anchor) => {
       t("Sign out")
     )
   );
-  pop.style.left = `${r.right + 10}px`;
+  // Beside the rail: to its right in English, to its left in Persian (the
+  // rail is on the right then).
+  if (document.documentElement.dir === "rtl") {
+    pop.style.right = `${window.innerWidth - r.left + 10}px`;
+    pop.style.transformOrigin = "bottom right";
+  } else pop.style.left = `${r.right + 10}px`;
   pop.style.bottom = `${window.innerHeight - r.bottom}px`;
   document.body.append(pop);
   setTimeout(() => document.addEventListener("pointerdown", function away(ev) {
@@ -1129,6 +1134,9 @@ const profileCard = (p) => {
     edit.addEventListener("click", () => {
       const host = viewEl.querySelector(".view__in .wrap");
       host.replaceChildren(profileForm(false));
+      // The form fades in like the rest of the page.
+      viewEl.scrollTop = 0;
+      watchReveals(viewEl);
     });
     actions.append(edit);
   } else if (p.relation === "none") {
